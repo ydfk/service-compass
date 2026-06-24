@@ -97,7 +97,7 @@ function emptySecrets(): ChannelSecrets {
     url: '',
     method: 'POST',
     headers: '{}',
-    mode: 'chatbot',
+    mode: 'incoming',
     base_url: '',
     token: '',
     target_type: 'channel',
@@ -156,13 +156,14 @@ function secretsFromConfig(config: Record<string, unknown>): ChannelSecrets {
   }
   if (Array.isArray(config.user_ids)) value.user_ids = config.user_ids.join(', ')
   if (typeof config.verify_tls === 'boolean') value.verify_tls = config.verify_tls
+  if (value.mode === 'chatbot' && !value.channel_id && !value.user_ids) value.mode = 'incoming'
   return value
 }
 
 async function saveChannel() {
   if (!channelForm.value.name) return message.warning('请输入通道名称')
   const config = buildConfig()
-  if (!editingChannel.value && !config) return message.warning('请填写通知配置')
+  if (!config) return message.warning('请填写完整的通知配置')
   const input = { ...channelForm.value, ...(config ? { config } : {}) }
   if (editingChannel.value) await notificationsApi.updateChannel(editingChannel.value.id, input)
   else await notificationsApi.createChannel(input)
@@ -193,19 +194,30 @@ function buildConfig(): Record<string, unknown> | undefined {
     }
     return { url: value.url, method: value.method, headers }
   }
-  if (!value.base_url || !value.token) return undefined
-  return {
+  if (!value.base_url) return undefined
+  const config: Record<string, unknown> = {
     mode: value.mode,
     base_url: value.base_url,
     token: value.token,
-    target_type: value.target_type,
-    channel_id: value.channel_id,
-    user_ids: value.user_ids
-      .split(',')
-      .map((item) => Number(item.trim()))
-      .filter(Number.isFinite),
     verify_tls: value.verify_tls,
   }
+  if (value.mode !== 'chatbot') return config
+  if (value.target_type === 'channel') {
+    if (!value.channel_id.trim()) {
+      message.warning('chatbot 模式必须填写频道 ID')
+      return undefined
+    }
+    return { ...config, target_type: 'channel', channel_id: value.channel_id.trim() }
+  }
+  const userIds = value.user_ids
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter(Number.isFinite)
+  if (!userIds.length) {
+    message.warning('chatbot 模式必须填写至少一个用户 ID')
+    return undefined
+  }
+  return { ...config, target_type: 'user', user_ids: userIds }
 }
 
 async function testChannel(channel: NotificationChannel) {
@@ -267,7 +279,7 @@ onMounted(load)
   <section class="channel-grid"><NCard v-for="channel in channels" :key="channel.id" size="small"><div class="channel-title"><NIcon :component="Bell" /><div><strong>{{ channel.name }}</strong><small>{{ channel.channel_type === 'synology_chat' ? 'Synology Chat 机器人' : channel.channel_type }}</small></div><NTag type="success" size="small" :bordered="false">已配置</NTag></div><NSpace><NButton size="small" @click="testChannel(channel)"><template #icon><NIcon :component="PlayerPlay" /></template>测试发送</NButton><NButton quaternary circle size="small" @click="openChannel(channel)"><NIcon :component="Edit" /></NButton><NButton quaternary circle size="small" @click="removeChannel(channel)"><NIcon :component="Trash" /></NButton></NSpace></NCard></section>
   <NDataTable :columns="ruleColumns" :data="rules" :row-key="(row: NotificationRule) => row.id" />
 
-  <NModal v-model:show="channelModal" preset="card" :title="editingChannel ? '编辑通知通道' : '添加通知通道'" class="notify-modal"><NForm label-placement="top"><div class="two-columns"><NFormItem label="名称"><NInput v-model:value="channelForm.name" /></NFormItem><NFormItem label="类型"><NSelect v-model:value="channelForm.channel_type" :disabled="Boolean(editingChannel)" :options="[{ label: 'Bark', value: 'bark' }, { label: 'Webhook', value: 'webhook' }, { label: 'Synology Chat 机器人', value: 'synology_chat' }]" /></NFormItem></div><template v-if="channelForm.channel_type === 'bark'"><NFormItem label="服务器地址"><NInput v-model:value="secrets.server_url" /></NFormItem><NFormItem label="Device Key"><NInput v-model:value="secrets.device_key" /></NFormItem></template><template v-else-if="channelForm.channel_type === 'webhook'"><NFormItem label="Webhook URL"><NInput v-model:value="secrets.url" /></NFormItem><NFormItem label="Headers JSON"><NInput v-model:value="secrets.headers" type="textarea" placeholder='{"Authorization":"Bearer ..."}' /></NFormItem></template><template v-else><NFormItem label="模式"><NSelect v-model:value="secrets.mode" :options="[{ label: '机器人 chatbot', value: 'chatbot' }, { label: 'Incoming Webhook 兼容', value: 'incoming' }]" /></NFormItem><NFormItem label="Chat 地址"><NInput v-model:value="secrets.base_url" placeholder="https://nas.example.com:5001" /></NFormItem><NFormItem label="Token"><NInput v-model:value="secrets.token" /></NFormItem><div class="two-columns"><NFormItem label="发送目标"><NSelect v-model:value="secrets.target_type" :options="[{ label: '频道', value: 'channel' }, { label: '用户', value: 'user' }, { label: 'Incoming 默认', value: 'incoming_default' }]" /></NFormItem><NFormItem v-if="secrets.target_type === 'channel'" label="频道 ID"><NInput v-model:value="secrets.channel_id" /></NFormItem><NFormItem v-if="secrets.target_type === 'user'" label="用户 ID（逗号分隔）"><NInput v-model:value="secrets.user_ids" /></NFormItem></div><NFormItem label="TLS 校验"><NSwitch v-model:value="secrets.verify_tls" /></NFormItem></template><NButton type="primary" block @click="saveChannel">保存通道</NButton></NForm></NModal>
+  <NModal v-model:show="channelModal" preset="card" :title="editingChannel ? '编辑通知通道' : '添加通知通道'" class="notify-modal"><NForm label-placement="top"><div class="two-columns"><NFormItem label="名称"><NInput v-model:value="channelForm.name" /></NFormItem><NFormItem label="类型"><NSelect v-model:value="channelForm.channel_type" :disabled="Boolean(editingChannel)" :options="[{ label: 'Bark', value: 'bark' }, { label: 'Webhook', value: 'webhook' }, { label: 'Synology Chat 机器人', value: 'synology_chat' }]" /></NFormItem></div><template v-if="channelForm.channel_type === 'bark'"><NFormItem label="服务器地址"><NInput v-model:value="secrets.server_url" /></NFormItem><NFormItem label="Device Key"><NInput v-model:value="secrets.device_key" /></NFormItem></template><template v-else-if="channelForm.channel_type === 'webhook'"><NFormItem label="Webhook URL"><NInput v-model:value="secrets.url" /></NFormItem><NFormItem label="Headers JSON"><NInput v-model:value="secrets.headers" type="textarea" placeholder='{"Authorization":"Bearer ..."}' /></NFormItem></template><template v-else><NFormItem label="模式"><NSelect v-model:value="secrets.mode" :options="[{ label: 'Incoming Webhook（推荐）', value: 'incoming' }, { label: 'Chatbot（指定频道或用户）', value: 'chatbot' }]" /></NFormItem><NFormItem label="Chat 地址或完整 Webhook URL"><NInput v-model:value="secrets.base_url" placeholder="填写 NAS 地址或 DSM 生成的完整 URL" /></NFormItem><NFormItem label="Token（完整 URL 已包含时可不填）"><NInput v-model:value="secrets.token" placeholder="填写 Synology Chat Token" /></NFormItem><div v-if="secrets.mode === 'chatbot'" class="two-columns"><NFormItem label="发送目标"><NSelect v-model:value="secrets.target_type" :options="[{ label: '频道', value: 'channel' }, { label: '用户', value: 'user' }]" /></NFormItem><NFormItem v-if="secrets.target_type === 'channel'" label="频道 ID"><NInput v-model:value="secrets.channel_id" placeholder="填写频道 ID" /></NFormItem><NFormItem v-if="secrets.target_type === 'user'" label="用户 ID（逗号分隔）"><NInput v-model:value="secrets.user_ids" placeholder="例如：12, 15" /></NFormItem></div><NFormItem label="TLS 校验"><NSwitch v-model:value="secrets.verify_tls" /></NFormItem></template><NButton type="primary" block @click="saveChannel">保存通道</NButton></NForm></NModal>
   <NModal v-model:show="ruleModal" preset="card" title="新建通知规则" class="rule-modal"><NForm label-placement="top"><NFormItem label="监控范围"><NSelect :value="ruleForm.monitor_id || ''" :options="[{ label: '全部监控', value: '' }, ...monitors.map((item) => ({ label: item.name, value: item.id }))]" @update:value="ruleForm.monitor_id = $event || null" /></NFormItem><NFormItem label="通知通道"><NSelect v-model:value="ruleForm.channel_id" :options="channels.map((item) => ({ label: item.name, value: item.id }))" /></NFormItem><NFormItem label="冷却时间（秒）"><NInputNumber v-model:value="ruleForm.cooldown_sec" :min="0" /></NFormItem><div class="switches"><label><NSwitch v-model:value="ruleForm.notify_on_down" />离线</label><label><NSwitch v-model:value="ruleForm.notify_on_recovery" />恢复</label><label><NSwitch v-model:value="ruleForm.notify_on_warning" />警告</label></div><NButton type="primary" block @click="saveRule">保存规则</NButton></NForm></NModal>
 </template>
 

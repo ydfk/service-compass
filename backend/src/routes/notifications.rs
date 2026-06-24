@@ -319,6 +319,12 @@ fn validate_channel(input: &NotificationChannelInput, creating: bool) -> AppResu
     if creating && input.config.is_none() {
         return Err(AppError::Validation("通知配置不能为空".into()));
     }
+    if input.channel_type == "synology_chat"
+        && let Some(config) = &input.config
+    {
+        crate::notify::synology_chat::validate_config(config)
+            .map_err(|error| AppError::Validation(error.to_string()))?;
+    }
     Ok(())
 }
 
