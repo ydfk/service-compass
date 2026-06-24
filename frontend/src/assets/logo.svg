@@ -1,0 +1,15 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ServiceCompass Logo</title>
+  <desc id="desc">A service dashboard compass logo with status nodes and a clean navigation pointer.</desc>
+  <rect x="24" y="24" width="208" height="208" rx="50" fill="#111827"/>
+  <circle cx="128" cy="128" r="78" fill="#172033" stroke="#334155" stroke-width="8"/>
+  <circle cx="128" cy="128" r="48" fill="#0F172A" stroke="#475569" stroke-width="5"/>
+  <path d="M128 58V78M128 178V198M58 128H78M178 128H198" stroke="#64748B" stroke-width="8" stroke-linecap="round"/>
+  <path d="M118 138L94 176L136 152L162 80L118 138Z" fill="#60A5FA"/>
+  <path d="M118 138L162 80L136 152L118 138Z" fill="#34D399"/>
+  <circle cx="128" cy="128" r="10" fill="#E5E7EB" stroke="#111827" stroke-width="5"/>
+  <circle cx="72" cy="72" r="10" fill="#34D399" stroke="#111827" stroke-width="5"/>
+  <circle cx="184" cy="72" r="10" fill="#60A5FA" stroke="#111827" stroke-width="5"/>
+  <circle cx="184" cy="184" r="10" fill="#FBBF24" stroke="#111827" stroke-width="5"/>
+</svg>
+

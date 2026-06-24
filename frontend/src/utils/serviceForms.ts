@@ -1,0 +1,111 @@
+import type { Monitor, MonitorInput, Service, ServiceInput } from '../types'
+
+export const UNGROUPED_ID = '00000000-0000-0000-0000-000000000000'
+
+export function emptyService(): ServiceInput {
+  return {
+    group_id: '',
+    name: '',
+    description: '',
+    icon_type: 'auto',
+    icon_value: '',
+    local_url: '',
+    public_url: '',
+    preferred_url_mode: 'public',
+    enabled: true,
+    sort_order: 0,
+    create_monitor: true,
+    monitor_type: 'http',
+    monitor_target_url_mode: 'public',
+  }
+}
+
+export function emptyHttpMonitor(): MonitorInput {
+  return {
+    service_id: null,
+    name: '',
+    monitor_type: 'http',
+    target_url: '',
+    target_url_mode: 'public',
+    method: 'GET',
+    expected_status_min: 200,
+    expected_status_max: 399,
+    keyword: '',
+    interval_sec: 60,
+    timeout_sec: 10,
+    retries: 2,
+    retry_interval_sec: 5,
+    follow_redirects: true,
+    tls_verify: true,
+    auth_type: 'none',
+    auth_username: '',
+    auth_password: '',
+    domain: '',
+    record_type: 'A',
+    expected_value: '',
+    cert_port: 443,
+    cert_warning_days: 30,
+    cert_critical_days: 7,
+    enabled: true,
+  }
+}
+
+export function monitorToInput(monitor: Monitor): MonitorInput {
+  return {
+    service_id: monitor.service_id,
+    name: monitor.name,
+    monitor_type: monitor.monitor_type === 'http_keyword' ? 'http_keyword' : 'http',
+    target_url: monitor.target_url,
+    target_url_mode: monitor.target_url_mode,
+    method: monitor.method,
+    expected_status_min: monitor.expected_status_min,
+    expected_status_max: monitor.expected_status_max,
+    keyword: monitor.keyword,
+    interval_sec: monitor.interval_sec,
+    timeout_sec: monitor.timeout_sec,
+    retries: monitor.retries,
+    retry_interval_sec: monitor.retry_interval_sec,
+    follow_redirects: monitor.follow_redirects,
+    tls_verify: monitor.tls_verify,
+    auth_type: monitor.auth_type,
+    auth_username: monitor.auth_username,
+    auth_password: '',
+    domain: monitor.domain,
+    record_type: monitor.record_type,
+    expected_value: monitor.expected_value,
+    cert_port: monitor.cert_port,
+    cert_warning_days: monitor.cert_warning_days,
+    cert_critical_days: monitor.cert_critical_days,
+    enabled: monitor.enabled,
+  }
+}
+
+export function serviceToInput(service: Service, monitor?: Monitor): ServiceInput {
+  return {
+    group_id: service.group_id === UNGROUPED_ID ? '' : service.group_id,
+    name: service.name,
+    description: service.description,
+    icon_type: service.icon_type,
+    icon_value: service.icon_value,
+    local_url: service.local_url,
+    public_url: service.public_url,
+    preferred_url_mode: service.preferred_url_mode,
+    enabled: service.enabled,
+    sort_order: service.sort_order,
+    docker_endpoint_id: service.docker_endpoint_id,
+    docker_container_id: service.docker_container_id,
+    docker_name: service.docker_name,
+    docker_image: service.docker_image,
+    docker_compose_project: service.docker_compose_project,
+    docker_compose_service: service.docker_compose_service,
+    create_monitor: Boolean(monitor?.enabled),
+    monitor_type: 'http',
+    monitor_target_url_mode: monitor?.target_url_mode === 'local' ? 'local' : 'public',
+  }
+}
+
+export function serviceHttpMonitor(monitors: Monitor[], serviceId: string) {
+  return monitors.find(
+    (item) => item.service_id === serviceId && ['http', 'http_keyword'].includes(item.monitor_type),
+  )
+}

@@ -1,0 +1,23 @@
+services:
+  service-compass:
+    image: ydfk/service-compass:latest
+    pull_policy: always
+    container_name: service-compass
+    restart: unless-stopped
+    ports:
+      - "${SERVICECOMPASS_PORT:-3010}:3000"
+    volumes:
+      - ./data:/data
+      # 启用本机 Docker 发现时再取消下一行注释
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
