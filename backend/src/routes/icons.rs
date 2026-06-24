@@ -70,11 +70,11 @@ async fn discover_favicon(Query(query): Query<UrlQuery>) -> AppResult<Json<serde
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(anyhow::Error::from)?;
-    let url = favicon::discover(&client, &query.url)
+    let urls = favicon::discover(&client, &query.url)
         .await
         .map_err(AppError::Internal)?;
-    tracing::info!(service_url = %query.url, favicon_url = %url, "服务 favicon 发现完成");
-    Ok(Json(serde_json::json!({ "url": url })))
+    tracing::info!(service_url = %query.url, count = urls.len(), "服务 favicon 发现完成");
+    Ok(Json(serde_json::json!({ "urls": urls })))
 }
 
 async fn upload(

@@ -8,7 +8,7 @@ export const iconsApi = {
   test: (reference: string) =>
     api<{ ok: boolean; url: string }>(`/api/icons/test?reference=${encodeURIComponent(reference)}`),
   favicon: (url: string) =>
-    api<{ url: string }>(`/api/icons/favicon?url=${encodeURIComponent(url)}`),
+    api<{ urls: string[] }>(`/api/icons/favicon?url=${encodeURIComponent(url)}`),
   upload: (file: File) => {
     const body = new FormData()
     body.append('file', file)

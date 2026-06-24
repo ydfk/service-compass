@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ExternalLink, Photo, Search, Upload } from '@vicons/tabler'
-import { NButton, NIcon, NInput, NSpace, useMessage } from 'naive-ui'
-import { computed, ref } from 'vue'
+import { NButton, NIcon, NInput, NSelect, NSpace, useMessage } from 'naive-ui'
+import { computed, ref, watch } from 'vue'
 import { iconsApi } from '../api/icons'
 
 const props = defineProps<{
@@ -16,6 +16,8 @@ const emit = defineEmits<{
 }>()
 const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const previewFailed = ref(false)
+const faviconOptions = ref<string[]>([])
 const message = useMessage()
 
 const preview = computed(() => {
@@ -24,16 +26,27 @@ const preview = computed(() => {
     ? `https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${props.iconValue}.svg`
     : props.iconValue
 })
+const faviconSelectOptions = computed(() =>
+  faviconOptions.value.map((url) => ({ label: faviconLabel(url), value: url })),
+)
+
+watch(preview, () => {
+  previewFailed.value = false
+})
 
 async function suggest() {
   if (!props.name.trim()) return message.warning('请先填写服务名称')
   loading.value = true
   try {
     const suggestion = await iconsApi.suggest(props.name)
-    const result = await iconsApi.test(suggestion.reference)
-    emit('update:iconType', 'selfhst')
-    emit('update:iconValue', suggestion.reference)
-    message.success(`已匹配 ${suggestion.reference} · ${result.url.split('/').at(-1)}`)
+    try {
+      const result = await iconsApi.test(suggestion.reference)
+      emit('update:iconType', 'selfhst')
+      emit('update:iconValue', suggestion.reference)
+      message.success(`已匹配 ${suggestion.reference} · ${result.url.split('/').at(-1)}`)
+    } catch {
+      message.warning(`未匹配到“${suggestion.reference}”，请浏览图标库或手动输入正确的 reference`)
+    }
   } finally {
     loading.value = false
   }
@@ -60,11 +73,28 @@ async function favicon() {
   loading.value = true
   try {
     const result = await iconsApi.favicon(props.serviceUrl)
-    emit('update:iconType', 'favicon')
-    emit('update:iconValue', result.url)
-    message.success('已发现 favicon')
+    faviconOptions.value = result.urls
+    selectFavicon(result.urls[0])
+    message.success(
+      result.urls.length > 1 ? `发现 ${result.urls.length} 个 favicon，请选择` : '已发现 favicon',
+    )
   } finally {
     loading.value = false
+  }
+}
+
+function selectFavicon(url?: string | null) {
+  if (!url) return
+  emit('update:iconType', 'favicon')
+  emit('update:iconValue', url)
+}
+
+function faviconLabel(value: string) {
+  try {
+    const url = new URL(value)
+    return `${url.hostname} · ${url.pathname.split('/').at(-1) || 'favicon'}`
+  } catch {
+    return value
   }
 }
 </script>
@@ -72,7 +102,7 @@ async function favicon() {
 <template>
   <div class="icon-picker">
     <div class="preview">
-      <img v-if="preview" :src="preview" alt="图标预览" />
+      <img v-if="preview && !previewFailed" :src="preview" alt="图标预览" @error="previewFailed = true" />
       <NIcon v-else :component="Photo" />
     </div>
     <div class="controls">
@@ -80,6 +110,13 @@ async function favicon() {
         :value="iconValue || ''"
         placeholder="selfh.st reference 或图标 URL"
         @update:value="emit('update:iconValue', $event)"
+      />
+      <NSelect
+        v-if="faviconOptions.length > 1"
+        :value="iconType === 'favicon' ? iconValue : null"
+        :options="faviconSelectOptions"
+        placeholder="选择一个 favicon"
+        @update:value="selectFavicon"
       />
       <NSpace>
         <NButton size="small" :loading="loading" @click="suggest">

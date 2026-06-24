@@ -1,50 +1,20 @@
 <script setup lang="ts">
 import { BrandDocker, ChartRadar, Edit, PlugConnected, Plus, Trash } from '@vicons/tabler'
-import {
-  NAlert,
-  NButton,
-  NCard,
-  NForm,
-  NFormItem,
-  NIcon,
-  NInput,
-  NModal,
-  NSelect,
-  NSpace,
-  NSwitch,
-  NTag,
-  useDialog,
-  useMessage,
-} from 'naive-ui'
+import { NAlert, NButton, NCard, NIcon, NSpace, NTag, useDialog, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { dockerApi } from '../api/docker'
 import DockerCandidateTable from '../components/DockerCandidateTable.vue'
-import type { DockerCandidate, DockerEndpoint, DockerEndpointInput } from '../types'
+import DockerEndpointModal from '../components/DockerEndpointModal.vue'
+import type { DockerCandidate, DockerEndpoint } from '../types'
 
 const endpoints = ref<DockerEndpoint[]>([])
 const candidates = ref<DockerCandidate[]>([])
 const editing = ref<DockerEndpoint | null>(null)
 const endpointModal = ref(false)
 const scanning = ref(false)
-const endpointForm = ref<DockerEndpointInput>(emptyEndpoint())
 const message = useMessage()
 const dialog = useDialog()
-
-function emptyEndpoint(): DockerEndpointInput {
-  return {
-    name: '本机 Docker',
-    endpoint_type: 'local_socket',
-    endpoint_url: 'unix:///var/run/docker.sock',
-    tls_enabled: false,
-    tls_ca: '',
-    tls_cert: '',
-    tls_key: '',
-    lan_host: '',
-    public_host_hint: '',
-    enabled: true,
-  }
-}
 
 async function load() {
   endpoints.value = await dockerApi.endpoints()
@@ -52,31 +22,10 @@ async function load() {
 
 function openEndpoint(endpoint?: DockerEndpoint) {
   editing.value = endpoint ?? null
-  endpointForm.value = endpoint
-    ? {
-        name: endpoint.name,
-        endpoint_type: endpoint.endpoint_type,
-        endpoint_url: endpoint.endpoint_url,
-        tls_enabled: endpoint.tls_enabled,
-        tls_ca: '',
-        tls_cert: '',
-        tls_key: '',
-        lan_host: endpoint.lan_host,
-        public_host_hint: endpoint.public_host_hint,
-        enabled: endpoint.enabled,
-      }
-    : emptyEndpoint()
   endpointModal.value = true
 }
 
-async function saveEndpoint() {
-  if (!endpointForm.value.name || !endpointForm.value.endpoint_url) {
-    return message.warning('请填写名称与 Endpoint 地址')
-  }
-  if (editing.value) await dockerApi.updateEndpoint(editing.value.id, endpointForm.value)
-  else await dockerApi.createEndpoint(endpointForm.value)
-  endpointModal.value = false
-  message.success('Docker Endpoint 已保存')
+async function endpointSaved() {
   await load()
 }
 
@@ -145,16 +94,7 @@ onMounted(load)
   </NAlert>
   <DockerCandidateTable :candidates="candidates" :loading="scanning" />
 
-  <NModal v-model:show="endpointModal" preset="card" :title="editing ? '编辑 Docker Endpoint' : '添加 Docker Endpoint'" class="endpoint-modal">
-    <NForm label-placement="top">
-      <div class="two-columns"><NFormItem label="名称"><NInput v-model:value="endpointForm.name" /></NFormItem><NFormItem label="类型"><NSelect v-model:value="endpointForm.endpoint_type" :options="[{ label: '本机 Unix Socket', value: 'local_socket' }, { label: '远程 TCP API', value: 'remote_tcp' }]" /></NFormItem></div>
-      <NFormItem label="Endpoint 地址"><NInput v-model:value="endpointForm.endpoint_url" :placeholder="endpointForm.endpoint_type === 'local_socket' ? 'unix:///var/run/docker.sock' : 'tcp://10.0.0.251:2376'" /></NFormItem>
-      <div class="two-columns"><NFormItem label="局域网主机（可选）"><NInput v-model:value="endpointForm.lan_host" placeholder="例如 NAS 地址 10.0.0.251" /><small class="field-help">与容器发布端口组合为候选内网地址，不是 Docker API 地址。</small></NFormItem><NFormItem label="外网主机（可选）"><NInput v-model:value="endpointForm.public_host_hint" placeholder="例如 service.example.com" /><small class="field-help">仅用于生成候选外网地址，不会自动配置域名或反向代理。</small></NFormItem></div>
-      <NFormItem v-if="endpointForm.endpoint_type === 'remote_tcp'" label="TLS"><NSwitch v-model:value="endpointForm.tls_enabled" /></NFormItem>
-      <template v-if="endpointForm.endpoint_type === 'remote_tcp' && endpointForm.tls_enabled"><NFormItem label="TLS CA（PEM，留空保留）"><NInput v-model:value="endpointForm.tls_ca" type="textarea" /></NFormItem><NFormItem label="TLS Cert（PEM，留空保留）"><NInput v-model:value="endpointForm.tls_cert" type="textarea" /></NFormItem><NFormItem label="TLS Key（PEM，留空保留）"><NInput v-model:value="endpointForm.tls_key" type="textarea" /></NFormItem></template>
-      <NButton type="primary" block @click="saveEndpoint">保存 Endpoint</NButton>
-    </NForm>
-  </NModal>
+  <DockerEndpointModal v-model:show="endpointModal" :endpoint="editing" @saved="endpointSaved" />
 
 </template>
 
@@ -168,10 +108,7 @@ onMounted(load)
 .endpoint-title { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; font-size: 1.35rem; }
 .endpoint-title div { display: grid; flex: 1; min-width: 0; font-size: 0.9rem; }
 .endpoint-title small { overflow: hidden; font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; text-overflow: ellipsis; }
-.endpoint-modal { width: min(48rem, calc(100vw - 2rem)); }
-.two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .candidate-tip { margin-bottom: 0.8rem; }
 .candidate-tip a { color: #5da9ff; }
-.field-help { display: block; margin-top: 0.35rem; color: #6f8098; line-height: 1.45; }
-@media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } .two-columns { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } }
 </style>

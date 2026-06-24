@@ -24,6 +24,7 @@ import type {
   ServiceInput,
   UrlMode,
 } from '../types'
+import DockerEndpointModal from './DockerEndpointModal.vue'
 import IconPicker from './IconPicker.vue'
 import MonitorForm from './MonitorForm.vue'
 
@@ -41,6 +42,7 @@ const localGroups = ref<Group[]>([])
 const addingGroup = ref(false)
 const newGroupName = ref('')
 const creatingGroup = ref(false)
+const endpointModal = ref(false)
 const message = useMessage()
 
 const endpointOptions = computed(() =>
@@ -125,6 +127,13 @@ function selectCandidate(containerId: string | null) {
     form.value.icon_value = candidate.suggested_icon
   }
 }
+
+function endpointSaved(endpoint: DockerEndpoint) {
+  const index = endpoints.value.findIndex((item) => item.id === endpoint.id)
+  if (index >= 0) endpoints.value[index] = endpoint
+  else endpoints.value.push(endpoint)
+  form.value.docker_endpoint_id = endpoint.id
+}
 </script>
 
 <template>
@@ -158,8 +167,9 @@ function selectCandidate(containerId: string | null) {
         <template #header-extra><NSwitch v-model:value="dockerEnabled" /></template>
         <div v-if="dockerEnabled" class="docker-row">
           <NSelect v-model:value="form.docker_endpoint_id" :options="endpointOptions" placeholder="选择 Docker 端点" />
+          <NButton title="添加 Docker Endpoint" @click="endpointModal = true"><NIcon :component="Plus" /></NButton>
           <NButton :loading="scanning" @click="scan"><template #icon><NIcon :component="Refresh" /></template>扫描</NButton>
-          <NSelect class="candidate-select" :value="selectedCandidate" :options="candidateOptions" placeholder="选择候选容器，仅关联所选项" @update:value="selectCandidate" />
+          <NSelect class="candidate-select" :value="selectedCandidate" :options="candidateOptions" filterable clearable placeholder="输入名称、容器或镜像筛选候选服务" @update:value="selectCandidate" />
           <small class="docker-note">选择容器后会自动创建 Docker 状态监控，不能单独关闭。</small>
         </div>
       </NCard>
@@ -182,6 +192,7 @@ function selectCandidate(containerId: string | null) {
       </div>
     </NForm>
   </NModal>
+  <DockerEndpointModal v-model:show="endpointModal" @saved="endpointSaved" />
 </template>
 
 <style scoped>
@@ -191,9 +202,9 @@ function selectCandidate(containerId: string | null) {
 .option-title, .footer-row span { display: flex; align-items: center; gap: 0.45rem; }
 .select-with-action, .inline-create { display: flex; width: 100%; gap: 0.5rem; }
 .inline-create { margin-top: 0.5rem; }
-.docker-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; }
-.candidate-select { grid-column: span 2; }
-.docker-note { grid-column: span 2; color: #6f8098; }
+.docker-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem; }
+.candidate-select, .docker-note { grid-column: span 3; }
+.docker-note { color: #6f8098; }
 .footer-row { display: flex; align-items: center; justify-content: space-between; margin-top: 1rem; }
 @media (max-width: 620px) { .form-grid, .monitor-row { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, ArrowRight, Copy, Edit, Photo } from '@vicons/tabler'
 import { NButton, NIcon } from 'naive-ui'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { MonitorTrack, Service, Status, UrlMode } from '../types'
 import StatusBadge from './StatusBadge.vue'
 
@@ -19,9 +19,15 @@ const emit = defineEmits<{
   clone: [service: Service]
   move: [service: Service, direction: -1 | 1]
 }>()
+const iconFailed = ref(false)
 const activeUrl = computed(() => {
   const preferred = props.mode === 'local' ? props.service.local_url : props.service.public_url
   return preferred || props.service.public_url || props.service.local_url
+})
+const iconUrl = computed(() => props.service.icon_url || props.service.icon_value || '')
+
+watch(iconUrl, () => {
+  iconFailed.value = false
 })
 
 function open() {
@@ -43,7 +49,7 @@ function trackSegments(track: MonitorTrack): Status[] {
 <template>
   <article class="service-card" :class="[cardMode, { disabled: !activeUrl, sorting }]" @click="open">
     <div class="service-icon">
-      <img v-if="service.icon_url || service.icon_value" :src="service.icon_url || service.icon_value || ''" :alt="service.name" />
+      <img v-if="iconUrl && !iconFailed" :src="iconUrl" :alt="service.name" @error="iconFailed = true" />
       <NIcon v-else :component="Photo" />
     </div>
     <div class="identity"><h3>{{ service.name }}</h3><p v-if="cardMode === 'detail'">{{ service.description || service.docker_image || '服务状态' }}</p></div>
