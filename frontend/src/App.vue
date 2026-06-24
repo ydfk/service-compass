@@ -4,14 +4,16 @@ import {
   NDialogProvider,
   NGlobalStyle,
   NMessageProvider,
+  dateZhCN,
   darkTheme,
+  zhCN,
 } from 'naive-ui'
 import { RouterView } from 'vue-router'
 import { themeOverrides } from './styles/theme'
 </script>
 
 <template>
-  <NConfigProvider :theme="darkTheme" :theme-overrides="themeOverrides">
+  <NConfigProvider :theme="darkTheme" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <NGlobalStyle />
     <NMessageProvider>
       <NDialogProvider>
@@ -20,4 +22,3 @@ import { themeOverrides } from './styles/theme'
     </NMessageProvider>
   </NConfigProvider>
 </template>
-

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Edit, Plus, Trash } from '@vicons/tabler'
+import { Copy, Edit, Plus, Trash } from '@vicons/tabler'
 import {
   NButton,
   NCard,
@@ -37,6 +37,8 @@ const groupModal = ref(false)
 const serviceModal = ref(false)
 const editingGroup = ref<Group | null>(null)
 const editingService = ref<Service | null>(null)
+const serviceEditorTitle = ref('添加服务')
+const draggingGroupId = ref<string | null>(null)
 const groupForm = ref<GroupInput>({ name: '', description: '', sort_order: 0 })
 const serviceForm = ref<ServiceInput>(emptyService())
 const httpMonitor = ref<MonitorInput>(emptyHttpMonitor())
@@ -68,6 +70,7 @@ const columns: DataTableColumns<Service> = [
       h(NSpace, null, {
         default: () => [
           action(Edit, '编辑', () => openService(row)),
+          action(Copy, '克隆', () => cloneService(row)),
           action(Trash, '删除', () => removeService(row)),
         ],
       }),
@@ -119,8 +122,20 @@ async function saveGroup() {
 
 function openService(service?: Service) {
   editingService.value = service ?? null
+  serviceEditorTitle.value = service ? '编辑服务' : '添加服务'
   const monitor = service ? serviceHttpMonitor(monitors.value, service.id) : undefined
   serviceForm.value = service ? serviceToInput(service, monitor) : emptyService()
+  httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
+  serviceModal.value = true
+}
+
+function cloneService(service: Service) {
+  editingService.value = null
+  serviceEditorTitle.value = `克隆 ${service.name}`
+  const monitor = serviceHttpMonitor(monitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor)
+  serviceForm.value.name = `${service.name} 副本`
+  serviceForm.value.sort_order = service.sort_order + 1
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
   serviceModal.value = true
 }
@@ -138,6 +153,29 @@ async function saveService() {
   serviceModal.value = false
   message.success('服务、Docker 关联与监控设置已保存')
   await load()
+}
+
+function startGroupDrag(group: Group) {
+  draggingGroupId.value = group.id
+}
+
+async function dropGroup(target: Group) {
+  const sourceId = draggingGroupId.value
+  draggingGroupId.value = null
+  if (!sourceId || sourceId === target.id) return
+  const ordered = [...groups.value]
+  const sourceIndex = ordered.findIndex((group) => group.id === sourceId)
+  const targetIndex = ordered.findIndex((group) => group.id === target.id)
+  if (sourceIndex < 0 || targetIndex < 0) return
+  const [source] = ordered.splice(sourceIndex, 1)
+  ordered.splice(targetIndex, 0, source)
+  groups.value = ordered
+  await groupsApi.reorder(ordered.map((group, index) => ({ id: group.id, sort_order: index })))
+  message.success('分组顺序已更新')
+}
+
+function addGroup(group: Group) {
+  if (!groups.value.some((item) => item.id === group.id)) groups.value.push(group)
 }
 
 function removeService(service: Service) {
@@ -165,10 +203,10 @@ onMounted(async () => {
 
 <template>
   <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
-  <section v-if="groups.length" class="group-strip"><NCard v-for="group in groups" :key="group.id" size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></section>
+  <section v-if="groups.length" class="group-strip"><div v-for="group in groups" :key="group.id" class="group-item" :class="{ dragging: draggingGroupId === group.id }" draggable="true" @dragstart="startGroupDrag(group)" @dragend="draggingGroupId = null" @dragover.prevent @drop.prevent="dropGroup(group)"><NCard size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务 · 可拖拽排序</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></div></section>
   <NDataTable :columns="columns" :data="services" :loading="loading" :row-key="(row: Service) => row.id" />
   <NModal v-model:show="groupModal" preset="card" :title="editingGroup ? '编辑分组' : '新建分组'" class="group-modal"><NForm><NFormItem label="名称"><NInput v-model:value="groupForm.name" /></NFormItem><NFormItem label="说明"><NInput v-model:value="groupForm.description" type="textarea" /></NFormItem><NFormItem label="排序"><NInputNumber v-model:value="groupForm.sort_order" /></NFormItem><NButton type="primary" block @click="saveGroup">保存分组</NButton></NForm></NModal>
-  <ServiceEditorModal v-model:show="serviceModal" v-model:form="serviceForm" v-model:monitor="httpMonitor" :groups="groups" :editing="Boolean(editingService)" @save="saveService" />
+  <ServiceEditorModal v-model:show="serviceModal" v-model:form="serviceForm" v-model:monitor="httpMonitor" :groups="groups" :editing="Boolean(editingService)" :title="serviceEditorTitle" @group-created="addGroup" @save="saveService" />
 </template>
 
 <style scoped>
@@ -178,6 +216,8 @@ onMounted(async () => {
 .page-header span, .group-strip small { color: #75859b; }
 .group-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
 .group-strip :deep(.n-card__content) { display: flex; align-items: center; justify-content: space-between; }
+.group-item { cursor: grab; transition: opacity 160ms ease, transform 160ms ease; }
+.group-item.dragging { opacity: 0.45; transform: scale(0.98); }
 .group-strip div { display: grid; }
 .group-modal { width: min(28rem, calc(100vw - 1.5rem)); }
 @media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } }

@@ -13,6 +13,11 @@ export const groupsApi = {
   create: (input: GroupInput) => api<Group>('/api/groups', request('POST', input)),
   update: (id: string, input: GroupInput) => api<Group>(`/api/groups/${id}`, request('PUT', input)),
   remove: (id: string) => api<{ ok: boolean }>(`/api/groups/${id}`, { method: 'DELETE' }),
+  reorder: (items: Array<{ id: string; sort_order: number }>) =>
+    api<{ ok: boolean }>('/api/groups/reorder', {
+      method: 'POST',
+      body: JSON.stringify(items),
+    }),
 }
 
 function request(method: string, input: GroupInput): RequestInit {

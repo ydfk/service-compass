@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandDocker, HeartRateMonitor, Refresh } from '@vicons/tabler'
+import { BrandDocker, HeartRateMonitor, Plus, Refresh } from '@vicons/tabler'
 import {
   NButton,
   NCard,
@@ -15,6 +15,7 @@ import {
 } from 'naive-ui'
 import { computed, ref, watch } from 'vue'
 import { dockerApi } from '../api/docker'
+import { groupsApi } from '../api/groups'
 import type {
   DockerCandidate,
   DockerEndpoint,
@@ -26,8 +27,8 @@ import type {
 import IconPicker from './IconPicker.vue'
 import MonitorForm from './MonitorForm.vue'
 
-const props = defineProps<{ groups: Group[]; editing: boolean }>()
-const emit = defineEmits<{ save: [] }>()
+const props = defineProps<{ groups: Group[]; editing: boolean; title?: string }>()
+const emit = defineEmits<{ save: []; 'group-created': [group: Group] }>()
 const show = defineModel<boolean>('show', { required: true })
 const form = defineModel<ServiceInput>('form', { required: true })
 const monitor = defineModel<MonitorInput>('monitor', { required: true })
@@ -36,6 +37,10 @@ const candidates = ref<DockerCandidate[]>([])
 const dockerEnabled = ref(false)
 const scanning = ref(false)
 const selectedCandidate = ref<string | null>(null)
+const localGroups = ref<Group[]>([])
+const addingGroup = ref(false)
+const newGroupName = ref('')
+const creatingGroup = ref(false)
 const message = useMessage()
 
 const endpointOptions = computed(() =>
@@ -49,15 +54,35 @@ const candidateOptions = computed(() =>
 )
 const groupOptions = computed(() => [
   { label: '未分组', value: '' },
-  ...props.groups.map((item) => ({ label: item.name, value: item.id })),
+  ...localGroups.value.map((item) => ({ label: item.name, value: item.id })),
 ])
 
 watch(show, async (value) => {
   if (!value) return
   dockerEnabled.value = Boolean(form.value.docker_endpoint_id)
   selectedCandidate.value = form.value.docker_container_id || null
+  localGroups.value = [...props.groups]
+  addingGroup.value = false
+  newGroupName.value = ''
   endpoints.value = await dockerApi.endpoints()
 })
+
+async function createGroup() {
+  const name = newGroupName.value.trim()
+  if (!name) return message.warning('请输入分组名称')
+  creatingGroup.value = true
+  try {
+    const group = await groupsApi.create({ name, sort_order: localGroups.value.length })
+    localGroups.value.push(group)
+    form.value.group_id = group.id
+    addingGroup.value = false
+    newGroupName.value = ''
+    emit('group-created', group)
+    message.success('分组已创建并选中')
+  } finally {
+    creatingGroup.value = false
+  }
+}
 
 watch(dockerEnabled, (value) => {
   if (value) return
@@ -103,14 +128,21 @@ function selectCandidate(containerId: string | null) {
 </script>
 
 <template>
-  <NModal v-model:show="show" preset="card" :title="editing ? '编辑服务' : '添加服务'" class="modal-wide">
+  <NModal v-model:show="show" preset="card" :title="title || (editing ? '编辑服务' : '添加服务')" class="modal-wide">
     <NForm label-placement="top" size="small">
       <div class="form-grid">
         <NFormItem label="服务名称" class="span-2"><NInput v-model:value="form.name" placeholder="例如：Home Assistant" /></NFormItem>
         <NFormItem label="外网地址"><NInput v-model:value="form.public_url" placeholder="https://service.example.com" /></NFormItem>
         <NFormItem label="内网地址（可选）"><NInput v-model:value="form.local_url" placeholder="http://192.168.1.10:8080" /></NFormItem>
         <NFormItem label="分组（可选）">
-          <NSelect v-model:value="form.group_id" :options="groupOptions" />
+          <div class="select-with-action">
+            <NSelect v-model:value="form.group_id" :options="groupOptions" placeholder="选择分组或保持未分组" />
+            <NButton title="新建分组" @click="addingGroup = !addingGroup"><NIcon :component="Plus" /></NButton>
+          </div>
+          <div v-if="addingGroup" class="inline-create">
+            <NInput v-model:value="newGroupName" placeholder="输入新分组名称" @keyup.enter="createGroup" />
+            <NButton type="primary" :loading="creatingGroup" @click="createGroup">创建</NButton>
+          </div>
         </NFormItem>
         <NFormItem label="默认访问">
           <NSelect v-model:value="form.preferred_url_mode" :options="[{ label: '外网', value: 'public' as UrlMode }, { label: '内网', value: 'local' as UrlMode }]" />
@@ -157,6 +189,8 @@ function selectCandidate(containerId: string | null) {
 .span-2 { grid-column: span 2; }
 .option-card { margin-top: 0.75rem; background: rgb(8 13 23 / 56%); }
 .option-title, .footer-row span { display: flex; align-items: center; gap: 0.45rem; }
+.select-with-action, .inline-create { display: flex; width: 100%; gap: 0.5rem; }
+.inline-create { margin-top: 0.5rem; }
 .docker-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; }
 .candidate-select { grid-column: span 2; }
 .docker-note { grid-column: span 2; color: #6f8098; }

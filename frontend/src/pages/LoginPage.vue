@@ -5,7 +5,7 @@ import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
-const username = ref('admin')
+const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const auth = useAuthStore()
@@ -37,10 +37,10 @@ async function submit() {
       <p class="intro">使用管理员账号进入控制台。首次登录账号和密码均为 admin。</p>
       <NForm @submit.prevent="submit">
         <NFormItem label="用户名">
-          <NInput v-model:value="username" autocomplete="username" autofocus />
+          <NInput v-model:value="username" autocomplete="username" autofocus placeholder="请输入管理员用户名" />
         </NFormItem>
         <NFormItem label="密码">
-          <NInput v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" />
+          <NInput v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" placeholder="请输入管理员密码" />
         </NFormItem>
         <NButton type="primary" block attr-type="submit" :loading="loading" :disabled="!username || !password">
           <template #icon><NIcon :component="Key" /></template>进入管理端

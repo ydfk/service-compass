@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, Edit, Photo } from '@vicons/tabler'
+import { ArrowLeft, ArrowRight, Copy, Edit, Photo } from '@vicons/tabler'
 import { NButton, NIcon } from 'naive-ui'
 import { computed } from 'vue'
 import type { MonitorTrack, Service, Status, UrlMode } from '../types'
@@ -16,6 +16,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   edit: [service: Service]
+  clone: [service: Service]
   move: [service: Service, direction: -1 | 1]
 }>()
 const activeUrl = computed(() => {
@@ -66,7 +67,10 @@ function trackSegments(track: MonitorTrack): Status[] {
         <NButton quaternary circle size="tiny" :disabled="index === 0" title="向前移动" @click="emit('move', service, -1)"><NIcon :component="ArrowLeft" /></NButton>
         <NButton quaternary circle size="tiny" :disabled="index === total - 1" title="向后移动" @click="emit('move', service, 1)"><NIcon :component="ArrowRight" /></NButton>
       </template>
-      <NButton v-else quaternary circle size="tiny" title="编辑服务" @click="emit('edit', service)"><NIcon :component="Edit" /></NButton>
+      <template v-else>
+        <NButton quaternary circle size="tiny" title="克隆服务" @click="emit('clone', service)"><NIcon :component="Copy" /></NButton>
+        <NButton quaternary circle size="tiny" title="编辑服务" @click="emit('edit', service)"><NIcon :component="Edit" /></NButton>
+      </template>
     </div>
   </article>
 </template>
