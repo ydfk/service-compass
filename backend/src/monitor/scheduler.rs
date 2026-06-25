@@ -64,7 +64,7 @@ pub async fn run(state: &AppState, monitor: &MonitorRow) -> monitor::CheckResult
     let result = match monitor.monitor_type.as_str() {
         "http" | "http_keyword" => monitor::http::check(state, monitor).await,
         "dns" => monitor::dns::check(monitor).await,
-        "cert" => monitor::cert::check(monitor).await,
+        "cert" => monitor::cert::check(state, monitor).await,
         "docker" => monitor::docker::check(state, monitor).await,
         _ => monitor::CheckResult::down("暂不支持此监控类型"),
     };

@@ -51,11 +51,16 @@ async fn check_once(state: &AppState, monitor: &MonitorRow) -> Result<CheckResul
         .unwrap_or("unknown");
     let health = json_text(&value, &["State", "Health", "Status"])
         .or_else(|| json_text(&value, &["state", "health", "status"]));
-    let result_status = match (status, health) {
-        ("running", Some("unhealthy")) => "down",
-        ("running", Some("starting")) | ("restarting", _) => "warning",
-        ("running", _) => "up",
-        _ => "down",
+    let result_status = match health {
+        Some("healthy") => "up",
+        Some("starting") => "warning",
+        Some("unhealthy") => "down",
+        Some(_) => "warning",
+        None => match status {
+            "running" => "up",
+            "restarting" => "warning",
+            _ => "down",
+        },
     };
     let latency_ms = i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX);
     let error_message = (result_status == "down").then(|| {

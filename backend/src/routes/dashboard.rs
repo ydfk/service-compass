@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -167,16 +169,64 @@ fn monitor_track(summary: &MonitorSummary, checks: &[(String, String)]) -> Monit
 }
 
 async fn summary(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM services WHERE enabled = 1")
-        .fetch_one(&state.pool)
+    let services: Vec<(String,)> = sqlx::query_as("SELECT id FROM services WHERE enabled = 1")
+        .fetch_all(&state.pool)
         .await?;
+    let monitors: Vec<(String, String, Option<i64>)> = sqlx::query_as(
+        "SELECT m.service_id, s.current_status, s.last_latency_ms \
+         FROM monitor_states s JOIN monitors m ON m.id = s.monitor_id \
+         WHERE m.service_id IS NOT NULL AND m.enabled = 1",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let mut by_service: HashMap<String, Vec<(String, Option<i64>)>> = HashMap::new();
+    for (service_id, status, latency) in monitors {
+        by_service
+            .entry(service_id)
+            .or_default()
+            .push((status, latency));
+    }
+    let mut counts = HashMap::from([
+        ("up", 0_i64),
+        ("down", 0_i64),
+        ("warning", 0_i64),
+        ("unknown", 0_i64),
+    ]);
+    let mut latencies = Vec::new();
+    for (service_id,) in &services {
+        let status = service_status(by_service.get(service_id));
+        *counts.entry(status).or_default() += 1;
+        if let Some(items) = by_service.get(service_id) {
+            latencies.extend(items.iter().filter_map(|item| item.1));
+        }
+    }
+    let avg_latency_ms = (!latencies.is_empty())
+        .then(|| latencies.iter().sum::<i64>() as f64 / latencies.len() as f64);
+    let checks_24h: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM monitor_checks WHERE checked_at >= ?")
+            .bind((Utc::now() - Duration::hours(24)).to_rfc3339())
+            .fetch_one(&state.pool)
+            .await?;
     Ok(Json(serde_json::json!({
-        "total": total,
-        "up": 0,
-        "down": 0,
-        "warning": 0,
-        "unknown": total
+        "total": services.len(),
+        "up": counts["up"],
+        "down": counts["down"],
+        "warning": counts["warning"],
+        "unknown": counts["unknown"],
+        "monitors": by_service.values().map(Vec::len).sum::<usize>(),
+        "checks_24h": checks_24h,
+        "avg_latency_ms": avg_latency_ms
     })))
+}
+
+fn service_status(items: Option<&Vec<(String, Option<i64>)>>) -> &'static str {
+    let Some(items) = items else {
+        return "unknown";
+    };
+    ["down", "warning", "unknown", "up"]
+        .into_iter()
+        .find(|candidate| items.iter().any(|item| item.0 == *candidate))
+        .unwrap_or("unknown")
 }
 
 async fn service_history(

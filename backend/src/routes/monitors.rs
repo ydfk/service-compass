@@ -234,6 +234,11 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
         return Err(AppError::Validation("监控类型无效".into()));
     }
     let is_http = matches!(input.monitor_type.as_str(), "http" | "http_keyword");
+    if is_http && !matches!(input.method.as_str(), "GET" | "HEAD" | "POST") {
+        return Err(AppError::Validation(
+            "HTTP 请求方法只支持 GET、HEAD、POST".into(),
+        ));
+    }
     if is_http
         && input.target_url_mode == "custom"
         && input.target_url.as_deref().unwrap_or_default().is_empty()

@@ -9,12 +9,12 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use x509_parser::{extensions::GeneralName, parse_x509_certificate};
 
-use crate::{models::monitor::MonitorRow, monitor::CheckResult};
+use crate::{models::monitor::MonitorRow, monitor::CheckResult, state::AppState};
 
-pub async fn check(monitor: &MonitorRow) -> CheckResult {
+pub async fn check(state: &AppState, monitor: &MonitorRow) -> CheckResult {
     match tokio::time::timeout(
         Duration::from_secs(monitor.timeout_sec.max(1) as u64),
-        check_inner(monitor),
+        check_inner(state, monitor),
     )
     .await
     {
@@ -23,7 +23,7 @@ pub async fn check(monitor: &MonitorRow) -> CheckResult {
     }
 }
 
-async fn check_inner(monitor: &MonitorRow) -> anyhow::Result<CheckResult> {
+async fn check_inner(state: &AppState, monitor: &MonitorRow) -> anyhow::Result<CheckResult> {
     let domain = monitor
         .domain
         .as_deref()
@@ -51,14 +51,15 @@ async fn check_inner(monitor: &MonitorRow) -> anyhow::Result<CheckResult> {
     let not_after = parsed.validity().not_after.timestamp();
     let now = chrono::Utc::now().timestamp();
     let days_left = (not_after - now) / 86_400;
-    let status = if days_left <= monitor.cert_critical_days {
+    let warning_days = cert_expiry_warning_days(state).await;
+    let status = if days_left <= 0 {
         "down"
-    } else if days_left <= monitor.cert_warning_days {
+    } else if days_left <= warning_days {
         "warning"
     } else {
         "up"
     };
-    tracing::info!(monitor_id = %monitor.id, domain, port, days_left, status, "TLS 证书检查完成");
+    tracing::info!(monitor_id = %monitor.id, domain, port, days_left, warning_days, status, "TLS 证书检查完成");
     let sans = parsed
         .subject_alternative_name()?
         .map(|extension| {
@@ -85,9 +86,22 @@ async fn check_inner(monitor: &MonitorRow) -> anyhow::Result<CheckResult> {
                 "not_before": parsed.validity().not_before.to_rfc2822().ok(),
                 "not_after": parsed.validity().not_after.to_rfc2822().ok(),
                 "days_left": days_left,
+                "warning_days": warning_days,
                 "sans": sans
             })
             .to_string(),
         ),
     })
+}
+
+async fn cert_expiry_warning_days(state: &AppState) -> i64 {
+    sqlx::query_scalar::<_, String>(
+        "SELECT value FROM settings WHERE key = 'cert_expiry_warning_days'",
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|value| value.parse().ok())
+    .unwrap_or(30)
 }

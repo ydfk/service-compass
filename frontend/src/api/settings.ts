@@ -1,10 +1,15 @@
 import { api } from './client'
 
+export interface SettingsPayload {
+  retention_days: number
+  cert_expiry_warning_days: number
+}
+
 export const settingsApi = {
-  get: () => api<{ retention_days: number }>('/api/settings'),
-  update: (retention_days: number) =>
-    api<{ retention_days: number }>('/api/settings', {
+  get: () => api<SettingsPayload>('/api/settings'),
+  update: (input: SettingsPayload) =>
+    api<SettingsPayload>('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({ retention_days }),
+      body: JSON.stringify(input),
     }),
 }
