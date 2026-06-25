@@ -54,8 +54,8 @@ function detail(point: StatusPoint) {
 </template>
 
 <style scoped>
-.status-strip { display: flex; width: 100%; height: 0.64rem; gap: 2px; }
-.status-strip i { display: block; min-width: 3px; flex: 1; height: 100%; border-radius: 999px; background: #334155; cursor: help; }
+.status-strip { display: flex; width: 100%; min-width: 0; height: 0.64rem; overflow: hidden; }
+.status-strip i { display: block; min-width: 0; flex: 1 1 0; height: 100%; border-inline-start: 1px solid var(--sc-card); border-radius: 999px; background: #334155; cursor: help; }
 .status-strip i.up { background: #4ade80; }
 .status-strip i.down { background: #f43f5e; }
 .status-strip i.warning { background: #f59e0b; }

@@ -31,10 +31,13 @@ async function submit() {
   <main class="login-page">
     <RouterLink class="back" to="/"><NIcon :component="ArrowLeft" />返回服务首页</RouterLink>
     <NCard class="login-card" :bordered="false">
-      <img src="../assets/logo.svg" alt="ServiceCompass" />
-      <p class="eyebrow">ADMIN CONSOLE</p>
-      <h1>校准管理航向</h1>
-      <p class="intro">使用管理员账号进入控制台。首次登录账号和密码均为 admin。</p>
+      <div class="brand">
+        <img src="../assets/logo.svg" alt="ServiceCompass" />
+        <div>
+          <p class="eyebrow">ServiceCompass</p>
+          <h1>管理员登录</h1>
+        </div>
+      </div>
       <NForm @submit.prevent="submit">
         <NFormItem label="用户名">
           <NInput v-model:value="username" autocomplete="username" autofocus placeholder="请输入管理员用户名" />
@@ -51,11 +54,11 @@ async function submit() {
 </template>
 
 <style scoped>
-.login-page { display: grid; min-height: 100vh; place-items: center; padding: 2rem; background: radial-gradient(circle at 72% 24%, rgb(52 211 153 / 10%), transparent 24rem); }
-.login-card { width: min(28rem, 100%); padding: 1.5rem; box-shadow: 0 2rem 7rem rgb(0 0 0 / 45%); }
-.login-card img { width: 4.2rem; }
-.eyebrow { margin: 1.6rem 0 0.5rem; color: #5da9ff; font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.2em; }
-h1 { margin: 0; font-size: 2rem; }
-.intro { margin: 0.8rem 0 1.8rem; color: #8190a5; line-height: 1.6; }
+.login-page { display: grid; min-height: 100vh; place-items: center; padding: 2rem; background: radial-gradient(circle at 70% 18%, rgb(52 211 153 / 10%), transparent 24rem); }
+.login-card { width: min(25rem, 100%); padding: 1.35rem; box-shadow: 0 2rem 7rem rgb(0 0 0 / 42%); }
+.brand { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.5rem; }
+.brand img { width: 3.2rem; }
+.eyebrow { margin: 0 0 0.25rem; color: #5da9ff; font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.16em; }
+h1 { margin: 0; font-size: 1.7rem; }
 .back { position: fixed; top: 2rem; left: 2rem; display: flex; align-items: center; gap: 0.4rem; color: #8190a5; text-decoration: none; }
 </style>

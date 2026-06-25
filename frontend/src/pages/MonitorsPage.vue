@@ -442,7 +442,11 @@ onMounted(load)
     width="min(1280px, calc(100vw - 24px))"
     :mask-closable="false"
   >
-    <NDrawerContent :title="selectedMonitor ? `${selectedMonitor.name} · 检查日志` : '检查日志'">
+    <NDrawerContent
+      :title="selectedMonitor ? `${selectedMonitor.name} · 检查日志` : '检查日志'"
+      closable
+      body-content-class="history-drawer-body"
+    >
       <section v-if="selectedMonitor" class="monitor-detail">
         <div class="detail-head">
           <div>
@@ -485,7 +489,16 @@ onMounted(load)
           <NDescriptionsItem label="最近错误">{{ selectedMonitor.last_error || '—' }}</NDescriptionsItem>
         </NDescriptions>
       </section>
-      <NDataTable :columns="checkColumns" :data="checks" size="small" :pagination="checkPagination" />
+      <NDataTable
+        class="check-table"
+        :columns="checkColumns"
+        :data="checks"
+        size="small"
+        :pagination="checkPagination"
+      />
+      <template #footer>
+        <NButton @click="historyDrawer = false">关闭</NButton>
+      </template>
     </NDrawerContent>
   </NDrawer>
 </template>
@@ -524,25 +537,30 @@ onMounted(load)
 .filter-select {
   width: 14rem;
 }
-:deep(.table-strip) { width: min(13rem, 100%); }
+:deep(.table-strip) { width: min(13rem, 100%); min-width: 0; }
+:global(.history-drawer-body) { min-width: 0; overflow-x: hidden; }
+:global(.history-drawer-body > *) { min-width: 0; }
 :deep(.same-service-cont td) { border-top-color: transparent !important; }
 :deep(.same-service-next td:first-child) { border-bottom-left-radius: 0; }
 :deep(.service-cell) { display: grid; gap: 0.12rem; line-height: 1.2; }
 :deep(.service-cell strong) { font-size: 0.82rem; }
 :deep(.service-cell small) { color: var(--sc-muted); font-size: 0.68rem; }
 :deep(.service-cell.muted) { color: var(--sc-muted); }
-.monitor-detail { display: grid; gap: 0.85rem; margin-bottom: 1rem; }
+.monitor-detail { display: grid; min-width: 0; gap: 0.85rem; margin-bottom: 1rem; overflow: hidden; }
 .detail-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+.detail-head > div { min-width: 0; }
 .detail-head small { color: var(--sc-muted); }
-.detail-head h2 { margin: 0.2rem 0 0; font-size: 1.8rem; }
+.detail-head h2 { margin: 0.2rem 0 0; overflow-wrap: anywhere; font-size: 1.8rem; }
 .status-card, .latency-card { background: var(--sc-card); }
+:deep(.status-card .n-card__content), :deep(.latency-card .n-card__content) { min-width: 0; overflow: hidden; }
 .status-card-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; color: var(--sc-muted); font-size: 0.78rem; }
-.detail-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.detail-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
 .latency-chart { width: 100%; height: 12rem; border-bottom: 1px solid rgb(148 163 184 / 18%); }
 .latency-line { fill: none; stroke: #4ade80; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
 .latency-fill { fill: rgb(74 222 128 / 16%); stroke: none; }
 .empty-chart { display: grid; height: 12rem; place-items: center; color: var(--sc-muted); }
 .monitor-meta { padding: 0.8rem; border: 1px solid var(--sc-border); border-radius: 0.75rem; }
+.check-table { min-width: 0; }
 .notify-monitor-modal {
   width: min(36rem, calc(100vw - 2rem));
 }
