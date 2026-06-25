@@ -125,6 +125,14 @@ docker compose build
 ```powershell
 .\scripts\check.ps1
 .\scripts\docker-build.ps1
+.\scripts\docker-test.ps1
+```
+
+`docker-test.ps1` 会构建镜像、启动 `docker compose`、等待 `/api/health` 通过，然后输出本地访问地址。常用参数：
+
+```powershell
+.\scripts\docker-test.ps1 -NoCache
+.\scripts\docker-test.ps1 -StopAfterTest
 ```
 
 ## 发布
