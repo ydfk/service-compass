@@ -66,6 +66,14 @@ pub struct MonitorView {
     pub last_latency_ms: Option<i64>,
     pub last_error: Option<String>,
     pub last_extra_json: Option<String>,
+    pub recent_statuses: Vec<String>,
+    pub recent_checks: Vec<MonitorCheck>,
+    pub notify_enabled: bool,
+    pub notification_channel_ids: Vec<String>,
+    pub notify_on_down: bool,
+    pub notify_on_recovery: bool,
+    pub notify_on_warning: bool,
+    pub notification_cooldown_sec: i64,
 }
 
 impl MonitorView {
@@ -102,6 +110,14 @@ impl MonitorView {
             last_latency_ms: None,
             last_error: None,
             last_extra_json: None,
+            recent_statuses: Vec::new(),
+            recent_checks: Vec::new(),
+            notify_enabled: false,
+            notification_channel_ids: Vec::new(),
+            notify_on_down: true,
+            notify_on_recovery: true,
+            notify_on_warning: true,
+            notification_cooldown_sec: 300,
         }
     }
 }
@@ -149,6 +165,18 @@ pub struct MonitorInput {
     pub cert_critical_days: i64,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
+    pub notify_enabled: bool,
+    #[serde(default)]
+    pub notification_channel_ids: Vec<String>,
+    #[serde(default = "default_true")]
+    pub notify_on_down: bool,
+    #[serde(default = "default_true")]
+    pub notify_on_recovery: bool,
+    #[serde(default = "default_true")]
+    pub notify_on_warning: bool,
+    #[serde(default = "default_cooldown")]
+    pub notification_cooldown_sec: i64,
 }
 
 impl MonitorInput {
@@ -184,6 +212,12 @@ impl MonitorInput {
             cert_warning_days: default_warning_days(),
             cert_critical_days: default_critical_days(),
             enabled: true,
+            notify_enabled: false,
+            notification_channel_ids: Vec::new(),
+            notify_on_down: true,
+            notify_on_recovery: true,
+            notify_on_warning: true,
+            notification_cooldown_sec: default_cooldown(),
         }
     }
 }
@@ -229,6 +263,9 @@ const fn default_warning_days() -> i64 {
 }
 const fn default_critical_days() -> i64 {
     7
+}
+const fn default_cooldown() -> i64 {
+    300
 }
 
 #[derive(Clone, Debug, FromRow, Serialize)]

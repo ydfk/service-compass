@@ -94,7 +94,11 @@ fn resolve_endpoint(config: &Value) -> Result<Endpoint> {
         .get("mode")
         .and_then(Value::as_str)
         .unwrap_or("incoming");
-    let method = query_method.unwrap_or_else(|| configured_method.to_owned());
+    let method = if configured_method == "incoming" {
+        "incoming".to_owned()
+    } else {
+        query_method.unwrap_or_else(|| configured_method.to_owned())
+    };
     let method = if method == "chatbot" {
         "chatbot".to_owned()
     } else {
@@ -182,6 +186,16 @@ mod tests {
         assert_eq!(endpoint.url.as_str(), "http://nas:5000/webapi/entry.cgi");
         assert_eq!(endpoint.method, "incoming");
         assert_eq!(endpoint.token, "secret");
+    }
+
+    #[test]
+    fn incoming_mode_ignores_chatbot_method_in_url() {
+        let endpoint = resolve_endpoint(&json!({
+            "mode": "incoming",
+            "base_url": "http://nas:5000/webapi/entry.cgi?api=SYNO.Chat.External&method=chatbot&version=2&token=secret"
+        }))
+        .unwrap();
+        assert_eq!(endpoint.method, "incoming");
     }
 
     #[test]

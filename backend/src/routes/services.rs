@@ -4,6 +4,7 @@ use axum::{
     routing::{get, post},
 };
 use chrono::Utc;
+use reqwest::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -213,9 +214,46 @@ async fn sync_service_monitors(
     });
     let http_monitor = input.monitor.as_ref().or(legacy_monitor.as_ref());
     monitors::sync_http_for_service(state, service_id, input.name.trim(), http_monitor).await?;
+    let cert_monitor = http_monitor.and_then(|monitor| cert_monitor_input(input, monitor));
+    monitors::sync_cert_for_service(
+        state,
+        service_id,
+        input.name.trim(),
+        cert_monitor.as_ref(),
+        input.cert_expiry_notify,
+    )
+    .await?;
     let docker_enabled = input.docker_endpoint_id.is_some() && input.docker_container_id.is_some();
     monitors::sync_docker_for_service(state, service_id, input.name.trim(), docker_enabled).await?;
     Ok(())
+}
+
+fn cert_monitor_input(input: &ServiceInput, monitor: &MonitorInput) -> Option<MonitorInput> {
+    let url = cert_source_url(input, monitor)?;
+    let parsed = Url::parse(&url).ok()?;
+    if parsed.scheme() != "https" {
+        return None;
+    }
+    let domain = parsed.host_str()?.to_owned();
+    let mut cert = monitor.clone();
+    cert.monitor_type = "cert".into();
+    cert.domain = Some(domain);
+    cert.cert_port = i64::from(parsed.port_or_known_default().unwrap_or(443));
+    cert.notify_on_down = false;
+    cert.notify_on_warning = true;
+    cert.notify_on_recovery = true;
+    Some(cert)
+}
+
+fn cert_source_url(input: &ServiceInput, monitor: &MonitorInput) -> Option<String> {
+    if monitor.target_url_mode == "custom" {
+        return monitor.target_url.clone();
+    }
+    match monitor.target_url_mode.as_str() {
+        "local" => input.local_url.clone().or_else(|| input.public_url.clone()),
+        "public" => input.public_url.clone().or_else(|| input.local_url.clone()),
+        _ => None,
+    }
 }
 
 fn validate(input: &ServiceInput) -> AppResult<()> {

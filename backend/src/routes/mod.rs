@@ -7,6 +7,7 @@ pub mod monitors;
 pub mod notifications;
 pub mod services;
 pub mod settings;
+pub mod version;
 
 use axum::{Json, Router, routing::get};
 
@@ -39,6 +40,7 @@ pub fn protected() -> Router<AppState> {
         .merge(notifications::router())
         .merge(services::router())
         .merge(settings::router())
+        .merge(version::router())
 }
 
 async fn health() -> Json<serde_json::Value> {

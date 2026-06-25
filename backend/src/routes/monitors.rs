@@ -67,6 +67,7 @@ async fn create(
     Json(input): Json<MonitorInput>,
 ) -> AppResult<Json<MonitorView>> {
     let id = create_record(&state, &input).await?;
+    sync_notification_rules(&state, &id, &input).await?;
     Ok(Json(
         view_with_state(&state, find(&state, &id).await?).await?,
     ))
@@ -81,6 +82,7 @@ async fn update(
     if !save(&state, &id, &input, false).await? {
         return Err(AppError::NotFound);
     }
+    sync_notification_rules(&state, &id, &input).await?;
     Ok(Json(
         view_with_state(&state, find(&state, &id).await?).await?,
     ))
@@ -150,7 +152,47 @@ async fn view_with_state(state: &AppState, row: MonitorRow) -> AppResult<Monitor
         view.last_error = error;
         view.last_extra_json = extra;
     }
+    view.recent_checks = sqlx::query_as::<_, MonitorCheck>(
+        "SELECT * FROM monitor_checks WHERE monitor_id = ? ORDER BY checked_at DESC LIMIT 5",
+    )
+    .bind(&view.id)
+    .fetch_all(&state.pool)
+    .await?;
+    view.recent_statuses = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM monitor_checks WHERE monitor_id = ? ORDER BY checked_at DESC LIMIT 30",
+    )
+    .bind(&view.id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .rev()
+    .collect();
+    apply_notification_settings(state, &mut view).await?;
     Ok(view)
+}
+
+async fn apply_notification_settings(state: &AppState, view: &mut MonitorView) -> AppResult<()> {
+    let rules: Vec<(String, bool, bool, bool, i64, bool)> = sqlx::query_as(
+        "SELECT channel_id, notify_on_down, notify_on_recovery, notify_on_warning, cooldown_sec, enabled \
+         FROM notification_rules WHERE monitor_id = ? ORDER BY created_at",
+    )
+    .bind(&view.id)
+    .fetch_all(&state.pool)
+    .await?;
+    let Some(first) = rules.first() else {
+        return Ok(());
+    };
+    let notify_on_down = first.1;
+    let notify_on_recovery = first.2;
+    let notify_on_warning = first.3;
+    let cooldown_sec = first.4;
+    view.notify_enabled = rules.iter().any(|item| item.5);
+    view.notification_channel_ids = rules.into_iter().map(|item| item.0).collect();
+    view.notify_on_down = notify_on_down;
+    view.notify_on_recovery = notify_on_recovery;
+    view.notify_on_warning = notify_on_warning;
+    view.notification_cooldown_sec = cooldown_sec;
+    Ok(())
 }
 
 async fn save(state: &AppState, id: &str, input: &MonitorInput, insert: bool) -> AppResult<bool> {
@@ -261,6 +303,7 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
     if input.interval_sec < 5
         || input.timeout_sec < 1
         || input.expected_status_min > input.expected_status_max
+        || input.notification_cooldown_sec < 0
     {
         return Err(AppError::Validation(
             "检查间隔、超时或状态码范围无效".into(),
@@ -315,8 +358,10 @@ pub(crate) async fn sync_http_for_service(
     validate(&monitor)?;
     if let Some(id) = existing {
         save(state, &id, &monitor, false).await?;
+        sync_notification_rules(state, &id, &monitor).await?;
     } else {
-        create_record(state, &monitor).await?;
+        let id = create_record(state, &monitor).await?;
+        sync_notification_rules(state, &id, &monitor).await?;
     }
     Ok(())
 }
@@ -358,5 +403,77 @@ pub(crate) async fn sync_docker_for_service(
         "custom".into(),
     );
     create_record(state, &input).await?;
+    Ok(())
+}
+
+pub(crate) async fn sync_cert_for_service(
+    state: &AppState,
+    service_id: &str,
+    service_name: &str,
+    monitor: Option<&MonitorInput>,
+    enabled: bool,
+) -> AppResult<()> {
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM monitors WHERE service_id = ? AND monitor_type = 'cert' LIMIT 1",
+    )
+    .bind(service_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    let Some(monitor) = monitor.filter(|_| enabled) else {
+        if let Some(id) = existing {
+            sqlx::query("DELETE FROM monitors WHERE id = ?")
+                .bind(id)
+                .execute(&state.pool)
+                .await?;
+        }
+        return Ok(());
+    };
+    let mut input = monitor.clone();
+    input.service_id = Some(service_id.to_string());
+    input.name = format!("{service_name} 证书");
+    input.monitor_type = "cert".into();
+    input.domain = monitor.domain.clone();
+    input.enabled = true;
+    validate(&input)?;
+    if let Some(id) = existing {
+        save(state, &id, &input, false).await?;
+        sync_notification_rules(state, &id, &input).await?;
+    } else {
+        let id = create_record(state, &input).await?;
+        sync_notification_rules(state, &id, &input).await?;
+    }
+    Ok(())
+}
+
+async fn sync_notification_rules(
+    state: &AppState,
+    monitor_id: &str,
+    input: &MonitorInput,
+) -> AppResult<()> {
+    sqlx::query("DELETE FROM notification_rules WHERE monitor_id = ?")
+        .bind(monitor_id)
+        .execute(&state.pool)
+        .await?;
+    if !input.notify_enabled || input.notification_channel_ids.is_empty() {
+        return Ok(());
+    }
+    let now = Utc::now().to_rfc3339();
+    for channel_id in &input.notification_channel_ids {
+        sqlx::query(
+            "INSERT INTO notification_rules (id, monitor_id, channel_id, notify_on_down, notify_on_recovery, \
+             notify_on_warning, cooldown_sec, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(monitor_id)
+        .bind(channel_id)
+        .bind(input.notify_on_down)
+        .bind(input.notify_on_recovery)
+        .bind(input.notify_on_warning)
+        .bind(input.notification_cooldown_sec)
+        .bind(&now)
+        .bind(&now)
+        .execute(&state.pool)
+        .await?;
+    }
     Ok(())
 }

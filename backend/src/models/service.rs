@@ -50,6 +50,8 @@ pub struct ServiceInput {
     pub sort_order: i64,
     #[serde(default)]
     pub create_monitor: bool,
+    #[serde(default)]
+    pub cert_expiry_notify: bool,
     #[serde(default = "default_monitor_type")]
     pub monitor_type: String,
     #[serde(default = "default_monitor_target_mode")]

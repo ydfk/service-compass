@@ -76,6 +76,9 @@ pub async fn dispatch(
             tracing::warn!(channel_id = %target.channel_id, "通知配置解密失败");
             continue;
         };
+        if !channel_allows_service(&config, monitor.service_id.as_deref()) {
+            continue;
+        }
         match notify::send(&client, &target.channel_type, &config, &event).await {
             Ok(_) => record_delivery(state, monitor, &target, event_type).await,
             Err(error) => tracing::warn!(channel_id = %target.channel_id, ?error, "通知发送失败"),
@@ -149,6 +152,23 @@ async fn load_service(state: &AppState, monitor: &MonitorRow) -> Option<(String,
         .await
         .ok()
         .flatten()
+}
+
+fn channel_allows_service(config: &serde_json::Value, service_id: Option<&str>) -> bool {
+    let Some(service_ids) = config
+        .get("service_ids")
+        .and_then(serde_json::Value::as_array)
+        .filter(|items| !items.is_empty())
+    else {
+        return true;
+    };
+    let Some(service_id) = service_id else {
+        return false;
+    };
+    service_ids
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .any(|item| item == service_id)
 }
 
 #[cfg(test)]
