@@ -65,7 +65,13 @@ async function save() {
 </script>
 
 <template>
-  <NModal v-model:show="show" preset="card" :title="endpoint ? '编辑 Docker Endpoint' : '添加 Docker Endpoint'" class="endpoint-modal">
+  <NModal
+    v-model:show="show"
+    preset="card"
+    :title="endpoint ? '编辑 Docker Endpoint' : '添加 Docker Endpoint'"
+    class="endpoint-modal"
+    :mask-closable="false"
+  >
     <NForm label-placement="top">
       <div class="two-columns">
         <NFormItem label="名称"><NInput v-model:value="form.name" placeholder="例如：本机 Docker" /></NFormItem>

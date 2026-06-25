@@ -20,8 +20,9 @@ import {
   NTag,
   useMessage,
   type DataTableColumns,
+  type PaginationProps,
 } from 'naive-ui'
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import { groupsApi } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
 import { notificationsApi } from '../api/notifications'
@@ -160,6 +161,11 @@ const checkColumns: DataTableColumns<MonitorCheck> = [
     render: (row) => briefExtra(row),
   },
 ]
+const checkPagination = reactive<PaginationProps>({
+  pageSize: 20,
+  pageSizes: [20, 50, 100],
+  showSizePicker: true,
+})
 
 const drawerPoints = computed(() => [...checks.value].reverse().map(checkPoint))
 const drawerStats = computed(() => {
@@ -397,7 +403,13 @@ onMounted(load)
     :row-class-name="monitorRowClass"
   />
 
-  <NModal v-model:show="notificationModal" preset="card" title="监控通知设置" class="notify-monitor-modal">
+  <NModal
+    v-model:show="notificationModal"
+    preset="card"
+    title="监控通知设置"
+    class="notify-monitor-modal"
+    :mask-closable="false"
+  >
     <NForm label-placement="top">
       <div class="switches">
         <label><NSwitch v-model:value="notificationForm.notify_enabled" /> 状态变化时通知</label>
@@ -425,7 +437,11 @@ onMounted(load)
     </NForm>
   </NModal>
 
-  <NDrawer v-model:show="historyDrawer" :width="980">
+  <NDrawer
+    v-model:show="historyDrawer"
+    width="min(1280px, calc(100vw - 24px))"
+    :mask-closable="false"
+  >
     <NDrawerContent :title="selectedMonitor ? `${selectedMonitor.name} · 检查日志` : '检查日志'">
       <section v-if="selectedMonitor" class="monitor-detail">
         <div class="detail-head">
@@ -469,7 +485,7 @@ onMounted(load)
           <NDescriptionsItem label="最近错误">{{ selectedMonitor.last_error || '—' }}</NDescriptionsItem>
         </NDescriptions>
       </section>
-      <NDataTable :columns="checkColumns" :data="checks" size="small" />
+      <NDataTable :columns="checkColumns" :data="checks" size="small" :pagination="checkPagination" />
     </NDrawerContent>
   </NDrawer>
 </template>

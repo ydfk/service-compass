@@ -200,6 +200,7 @@ function removeChannel(channel: NotificationChannel) {
     content: `确认删除 ${channel.name}？监控中的关联通知也会失效。`,
     positiveText: '删除',
     negativeText: '取消',
+    maskClosable: false,
     onPositiveClick: async () => {
       await notificationsApi.removeChannel(channel.id)
       await load()
@@ -252,7 +253,13 @@ onMounted(load)
     </NCard>
   </section>
 
-  <NModal v-model:show="channelModal" preset="card" :title="editingChannel ? '编辑通知通道' : '添加通知通道'" class="notify-modal">
+  <NModal
+    v-model:show="channelModal"
+    preset="card"
+    :title="editingChannel ? '编辑通知通道' : '添加通知通道'"
+    class="notify-modal"
+    :mask-closable="false"
+  >
     <NForm label-placement="top">
       <div class="two-columns">
         <NFormItem label="名称"><NInput v-model:value="channelForm.name" /></NFormItem>

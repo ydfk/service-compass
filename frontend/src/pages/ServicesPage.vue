@@ -200,6 +200,7 @@ function removeService(service: Service) {
     content: `确认删除 ${service.name}？`,
     positiveText: '删除',
     negativeText: '取消',
+    maskClosable: false,
     onPositiveClick: async () => {
       await servicesApi.remove(service.id)
       await load()
@@ -221,7 +222,20 @@ onMounted(async () => {
   <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
   <section v-if="groups.length" class="group-strip"><div v-for="group in groups" :key="group.id" class="group-item" :class="{ dragging: draggingGroupId === group.id }" draggable="true" @dragstart="startGroupDrag(group)" @dragend="draggingGroupId = null" @dragover.prevent @drop.prevent="dropGroup(group)"><NCard size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务 · 可拖拽排序</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></div></section>
   <NDataTable :columns="columns" :data="services" :loading="loading" :row-key="(row: Service) => row.id" />
-  <NModal v-model:show="groupModal" preset="card" :title="editingGroup ? '编辑分组' : '新建分组'" class="group-modal"><NForm><NFormItem label="名称"><NInput v-model:value="groupForm.name" /></NFormItem><NFormItem label="说明"><NInput v-model:value="groupForm.description" type="textarea" /></NFormItem><NFormItem label="排序"><NInputNumber v-model:value="groupForm.sort_order" /></NFormItem><NButton type="primary" block @click="saveGroup">保存分组</NButton></NForm></NModal>
+  <NModal
+    v-model:show="groupModal"
+    preset="card"
+    :title="editingGroup ? '编辑分组' : '新建分组'"
+    class="group-modal"
+    :mask-closable="false"
+  >
+    <NForm>
+      <NFormItem label="名称"><NInput v-model:value="groupForm.name" /></NFormItem>
+      <NFormItem label="说明"><NInput v-model:value="groupForm.description" type="textarea" /></NFormItem>
+      <NFormItem label="排序"><NInputNumber v-model:value="groupForm.sort_order" /></NFormItem>
+      <NButton type="primary" block @click="saveGroup">保存分组</NButton>
+    </NForm>
+  </NModal>
   <ServiceEditorModal v-model:show="serviceModal" v-model:form="serviceForm" v-model:monitor="httpMonitor" :groups="groups" :editing="Boolean(editingService)" :title="serviceEditorTitle" @group-created="addGroup" @save="saveService" />
 </template>
 

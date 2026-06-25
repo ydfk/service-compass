@@ -50,6 +50,7 @@ function removeEndpoint(endpoint: DockerEndpoint) {
     content: `删除 ${endpoint.name} 及其扫描缓存？已添加的服务不会被删除。`,
     positiveText: '删除',
     negativeText: '取消',
+    maskClosable: false,
     onPositiveClick: async () => {
       await dockerApi.removeEndpoint(endpoint.id)
       await load()

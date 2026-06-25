@@ -178,7 +178,13 @@ function endpointSaved(endpoint: DockerEndpoint) {
 </script>
 
 <template>
-  <NModal v-model:show="show" preset="card" :title="title || (editing ? '编辑服务' : '添加服务')" class="modal-wide">
+  <NModal
+    v-model:show="show"
+    preset="card"
+    :title="title || (editing ? '编辑服务' : '添加服务')"
+    class="modal-wide"
+    :mask-closable="false"
+  >
     <NForm label-placement="top" size="small">
       <div class="form-grid">
         <NFormItem label="服务名称" class="span-2"><NInput v-model:value="form.name" placeholder="例如：Home Assistant" /></NFormItem>
