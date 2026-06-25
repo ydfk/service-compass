@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::{
     models::notification::NotificationEvent,
-    notify::{SendResult, required, response_result},
+    notify::{SendResult, required, response_result, status_message},
 };
 
 pub async fn send(
@@ -23,7 +23,7 @@ pub async fn send(
         .post(format!("{server}/{device_key}"))
         .json(&serde_json::json!({
             "title": title,
-            "body": event.message,
+            "body": status_message(event),
             "group": config.get("group").and_then(Value::as_str).unwrap_or("ServiceCompass"),
             "sound": config.get("sound").and_then(Value::as_str).unwrap_or("bell")
         }))

@@ -78,5 +78,7 @@ pub struct NotificationEvent {
     pub status: String,
     pub message: String,
     pub target: Option<String>,
+    pub latency_ms: Option<i64>,
+    pub status_code: Option<i64>,
     pub checked_at: String,
 }

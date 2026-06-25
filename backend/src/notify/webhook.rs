@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::{
     models::notification::NotificationEvent,
-    notify::{SendResult, required, response_result},
+    notify::{SendResult, required, response_result, status_message},
 };
 
 pub async fn send(
@@ -41,7 +41,10 @@ pub async fn send(
             "monitor_name": event.monitor_name,
             "status": event.status,
             "message": event.message,
+            "formatted_message": status_message(event),
             "target": event.target,
+            "latency_ms": event.latency_ms,
+            "status_code": event.status_code,
             "checked_at": event.checked_at
         }))
         .send()

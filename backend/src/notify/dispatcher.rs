@@ -53,11 +53,13 @@ pub async fn dispatch(
         message: result
             .error_message
             .clone()
-            .unwrap_or_else(|| "服务已恢复".into()),
+            .unwrap_or_else(|| default_message(&result.status)),
         target: monitor
             .target_url
             .clone()
             .or_else(|| monitor.domain.clone()),
+        latency_ms: result.latency_ms,
+        status_code: result.status_code,
         checked_at: checked_at.into(),
     };
     let client = reqwest::Client::new();
@@ -84,6 +86,16 @@ pub async fn dispatch(
             Err(error) => tracing::warn!(channel_id = %target.channel_id, ?error, "通知发送失败"),
         }
     }
+}
+
+fn default_message(status: &str) -> String {
+    match status {
+        "up" => "healthy",
+        "warning" => "warning",
+        "down" => "down",
+        _ => "unknown",
+    }
+    .into()
 }
 
 fn transition(previous: &str, current: &str) -> Option<&'static str> {
@@ -173,7 +185,7 @@ fn channel_allows_service(config: &serde_json::Value, service_id: Option<&str>) 
 
 #[cfg(test)]
 mod tests {
-    use super::transition;
+    use super::{default_message, transition};
 
     #[test]
     fn only_relevant_status_changes_emit_events() {
@@ -181,5 +193,10 @@ mod tests {
         assert_eq!(transition("down", "up"), Some("monitor_recovery"));
         assert_eq!(transition("unknown", "down"), None);
         assert_eq!(transition("down", "down"), None);
+    }
+
+    #[test]
+    fn default_recovery_message_is_healthy() {
+        assert_eq!(default_message("up"), "healthy");
     }
 }

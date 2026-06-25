@@ -115,6 +115,8 @@ async fn test_channel(
         status: "up".into(),
         message: "这是一条 ServiceCompass 测试通知".into(),
         target: None,
+        latency_ms: None,
+        status_code: None,
         checked_at: Utc::now().to_rfc3339(),
     };
     let client = reqwest::Client::new();

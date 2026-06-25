@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     models::notification::NotificationEvent,
-    notify::{SendResult, required},
+    notify::{SendResult, required, status_message},
 };
 
 struct Endpoint {
@@ -26,16 +26,7 @@ pub async fn send(
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(!verify_tls)
         .build()?;
-    let text = format!(
-        "[ServiceCompass] {}\n状态：{}\n原因：{}{}",
-        event.service_name.as_deref().unwrap_or(&event.monitor_name),
-        event.status,
-        event.message,
-        event
-            .target
-            .as_ref()
-            .map_or_else(String::new, |target| format!("\n地址：{target}"))
-    );
+    let text = status_message(event);
     let (method, body) = build_payload(config, &endpoint.method, text);
     if endpoint.method == "chatbot" && method == "incoming" {
         bail!(
