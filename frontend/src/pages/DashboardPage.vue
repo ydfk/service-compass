@@ -4,6 +4,7 @@ import { NButton, NButtonGroup, NEmpty, NIcon, NSpin, useMessage } from 'naive-u
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { api } from '../api/client'
 import { groupsApi } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
 import { servicesApi } from '../api/services'
@@ -48,6 +49,7 @@ const editorMonitors = ref<Monitor[]>([])
 const editingService = ref<Service | null>(null)
 const serviceForm = ref<ServiceInput>(emptyService())
 const httpMonitor = ref<MonitorInput>(emptyHttpMonitor())
+const appVersion = ref('')
 const message = useMessage()
 const total = computed(() =>
   groups.value.reduce((count, group) => count + group.services.length, 0),
@@ -162,8 +164,17 @@ function addEditorGroup(group: Group) {
   if (!editorGroups.value.some((item) => item.id === group.id)) editorGroups.value.push(group)
 }
 
+async function loadVersion() {
+  try {
+    const health = await api<{ version: string }>('/api/health')
+    appVersion.value = health.version
+  } catch {
+    appVersion.value = ''
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([dashboard.load(), auth.verify()])
+  await Promise.all([dashboard.load(), auth.verify(), loadVersion()])
 })
 </script>
 
@@ -220,7 +231,7 @@ onMounted(async () => {
       @group-created="addEditorGroup"
       @save="saveService"
     />
-    <footer class="public-footer">ServiceCompass · v0.1.0 · © 2026</footer>
+    <footer class="public-footer">ServiceCompass · {{ appVersion || '0.1.0' }} · © 2026</footer>
   </div>
 </template>
 

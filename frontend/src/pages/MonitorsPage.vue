@@ -160,7 +160,7 @@ function hStatusStrip(statuses: Status[]) {
   const values = statuses.length ? statuses : ['unknown']
   return h(
     'div',
-    { class: 'status-strip', title: '最近 30 次检查' },
+    { class: 'monitor-status-strip', title: '最近 30 次检查' },
     values.map((status, index) => h('i', { key: index, class: status })),
   )
 }
@@ -388,25 +388,25 @@ onMounted(load)
 .filter-select {
   width: 14rem;
 }
-.status-strip {
+:deep(.monitor-status-strip) {
   display: flex;
   width: min(12rem, 100%);
   height: 0.55rem;
   gap: 2px;
 }
-.status-strip i {
+:deep(.monitor-status-strip i) {
   min-width: 2px;
   flex: 1;
   border-radius: 1px;
   background: #334155;
 }
-.status-strip i.up {
+:deep(.monitor-status-strip i.up) {
   background: #34d399;
 }
-.status-strip i.down {
+:deep(.monitor-status-strip i.down) {
   background: #fb7185;
 }
-.status-strip i.warning {
+:deep(.monitor-status-strip i.warning) {
   background: #fbbf24;
 }
 .notify-monitor-modal {

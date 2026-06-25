@@ -183,7 +183,6 @@ function buildSynologyConfig(scoped: Record<string, unknown>) {
     .split(/[,\n，]/)
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => (/^\d+$/.test(item) ? Number(item) : item))
   if (!userIds.length) {
     message.warning('chatbot 模式必须填写至少一个用户 ID')
     return undefined
@@ -242,10 +241,10 @@ onMounted(load)
   </header>
 
   <section class="channel-grid">
-    <NCard v-for="channel in channels" :key="channel.id" size="small">
+    <NCard v-for="channel in channels" :key="channel.id" size="small" class="channel-card">
       <div class="channel-title">
-        <NIcon :component="Bell" />
-        <div>
+        <NIcon :component="Bell" class="channel-icon" />
+        <div class="channel-main">
           <strong>{{ channel.name }}</strong>
           <small>{{ channel.channel_type === 'synology_chat' ? 'Synology Chat' : channel.channel_type }} · {{ scopeText(channel) }}</small>
         </div>
@@ -253,10 +252,10 @@ onMounted(load)
           {{ channel.enabled ? '启用' : '停用' }}
         </NTag>
       </div>
-      <NSpace>
+      <NSpace size="small" class="channel-actions">
         <NButton size="small" @click="testChannel(channel)">
           <template #icon><NIcon :component="PlayerPlay" /></template>
-          测试发送
+          测试
         </NButton>
         <NButton quaternary circle size="small" @click="openChannel(channel)"><NIcon :component="Edit" /></NButton>
         <NButton quaternary circle size="small" @click="removeChannel(channel)"><NIcon :component="Trash" /></NButton>
@@ -366,9 +365,14 @@ onMounted(load)
 .page-header p { margin: 0; color: #fbbf24; font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.2em; }
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .channel-title small { color: var(--sc-muted); }
-.channel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; margin-bottom: 1rem; }
-.channel-title { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; font-size: 1.35rem; }
-.channel-title div { display: grid; flex: 1; font-size: 0.9rem; }
+.channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr)); gap: 0.65rem; margin-bottom: 1rem; }
+.channel-card :deep(.n-card__content) { padding: 0.75rem; }
+.channel-title { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.55rem; min-width: 0; }
+.channel-icon { flex: 0 0 auto; font-size: 1.05rem; }
+.channel-main { display: grid; flex: 1; min-width: 0; font-size: 0.86rem; }
+.channel-main strong, .channel-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.channel-main small { font-size: 0.72rem; }
+.channel-actions { flex-wrap: nowrap; }
 .notify-modal { width: min(48rem, calc(100vw - 2rem)); }
 .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .scope-card { margin: 0.5rem 0 1rem; background: var(--sc-card); }
