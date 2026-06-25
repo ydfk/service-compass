@@ -7,11 +7,12 @@ RUN pnpm build
 
 FROM rust:1-bookworm AS backend-builder
 WORKDIR /app
+ARG SERVICECOMPASS_VERSION
 COPY Cargo.toml Cargo.lock ./
 COPY backend backend
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
   --mount=type=cache,target=/usr/local/cargo/git \
-  cargo build --release -p service-compass-backend
+  SERVICECOMPASS_VERSION="${SERVICECOMPASS_VERSION}" cargo build --release -p service-compass-backend
 
 FROM debian:bookworm-slim
 WORKDIR /app

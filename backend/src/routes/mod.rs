@@ -47,6 +47,6 @@ async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
         "app": "ServiceCompass",
-        "version": env!("CARGO_PKG_VERSION")
+        "version": version::current_version()
     }))
 }

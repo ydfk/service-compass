@@ -21,15 +21,22 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/api/version", get(version))
 }
 
+pub fn current_version() -> &'static str {
+    match option_env!("SERVICECOMPASS_VERSION") {
+        Some(version) if !version.trim().is_empty() => version,
+        _ => env!("CARGO_PKG_VERSION"),
+    }
+}
+
 async fn version() -> Json<VersionInfo> {
     let latest = fetch_latest().await;
     let latest_version = latest.as_ref().map(|item| item.0.clone());
     let release_url = latest.map(|item| item.1);
     let update_available = latest_version
         .as_deref()
-        .is_some_and(|latest| normalize(latest) != normalize(env!("CARGO_PKG_VERSION")));
+        .is_some_and(|latest| normalize(latest) != normalize(current_version()));
     Json(VersionInfo {
-        current_version: env!("CARGO_PKG_VERSION"),
+        current_version: current_version(),
         latest_version,
         update_available,
         release_url,
