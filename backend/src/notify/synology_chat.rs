@@ -36,24 +36,14 @@ pub async fn send(
             .as_ref()
             .map_or_else(String::new, |target| format!("\n地址：{target}"))
     );
-    let (method, body) = build_payload(config, &endpoint.method, text.clone());
+    let (method, body) = build_payload(config, &endpoint.method, text);
     if endpoint.method == "chatbot" && method == "incoming" {
-        tracing::warn!("Synology Chat chatbot 未配置发送目标，按 Incoming Webhook 兼容模式发送");
-    }
-    let (mut status, mut response_body) = send_request(&client, &endpoint, method, &body).await?;
-    if endpoint.method == "chatbot"
-        && method == "chatbot"
-        && should_retry_as_incoming(status, &response_body)
-    {
-        tracing::warn!(
-            code = synology_error_code(&response_body),
-            "Synology Chat chatbot 返回参数错误，按 Incoming Webhook 兼容模式重试"
+        bail!(
+            "Synology Chat Chatbot 模式必须填写至少一个数字用户 ID；频道通知请使用 Incoming Webhook"
         );
-        let fallback_body = serde_json::json!({ "text": text });
-        (status, response_body) =
-            send_request(&client, &endpoint, "incoming", &fallback_body).await?;
     }
-    validate_response(status, &response_body)?;
+    let (status, response_body) = send_request(&client, &endpoint, method, &body).await?;
+    validate_response(method, status, &response_body)?;
     let summary = response_body.chars().take(512).collect::<String>();
     Ok(SendResult {
         status_code: status.as_u16(),
@@ -64,7 +54,9 @@ pub async fn send(
 pub fn validate_config(config: &Value) -> Result<()> {
     let endpoint = resolve_endpoint(config)?;
     if endpoint.method == "chatbot" && !has_chatbot_target(config) {
-        bail!("Synology Chat chatbot 模式必须填写频道 ID 或用户 ID");
+        bail!(
+            "Synology Chat Chatbot 模式必须填写至少一个数字用户 ID；频道通知请使用 Incoming Webhook"
+        );
     }
     Ok(())
 }
@@ -116,11 +108,7 @@ fn resolve_endpoint(config: &Value) -> Result<Endpoint> {
         .get("mode")
         .and_then(Value::as_str)
         .unwrap_or("incoming");
-    let method = if configured_method == "incoming" {
-        "incoming".to_owned()
-    } else {
-        query_method.unwrap_or_else(|| configured_method.to_owned())
-    };
+    let method = query_method.unwrap_or_else(|| configured_method.to_owned());
     let method = if method == "chatbot" {
         "chatbot".to_owned()
     } else {
@@ -150,13 +138,6 @@ fn has_chatbot_target(config: &Value) -> bool {
 
 fn apply_chatbot_target(config: &Value, body: &mut Value) -> bool {
     match config.get("target_type").and_then(Value::as_str) {
-        Some("channel") => {
-            let Some(channel_id) = config.get("channel_id").and_then(non_empty_value) else {
-                return false;
-            };
-            body["channel_id"] = channel_id;
-            true
-        }
         Some("user") => {
             let Some(user_ids) = config
                 .get("user_ids")
@@ -167,7 +148,7 @@ fn apply_chatbot_target(config: &Value, body: &mut Value) -> bool {
             };
             let user_ids = user_ids
                 .iter()
-                .filter_map(non_empty_value)
+                .filter_map(positive_user_id)
                 .collect::<Vec<_>>();
             if user_ids.is_empty() {
                 return false;
@@ -179,20 +160,6 @@ fn apply_chatbot_target(config: &Value, body: &mut Value) -> bool {
     }
 }
 
-fn non_empty_value(value: &Value) -> Option<Value> {
-    match value {
-        Value::Number(number) => Some(Value::String(number.to_string())),
-        Value::String(text) if !text.trim().is_empty() => {
-            Some(Value::String(text.trim().to_owned()))
-        }
-        _ => None,
-    }
-}
-
-fn should_retry_as_incoming(status: reqwest::StatusCode, body: &str) -> bool {
-    status.is_success() && matches!(synology_error_code(body), Some(117))
-}
-
 fn synology_error_code(body: &str) -> Option<i64> {
     serde_json::from_str::<Value>(body)
         .ok()?
@@ -201,12 +168,31 @@ fn synology_error_code(body: &str) -> Option<i64> {
         .as_i64()
 }
 
-fn validate_response(status: reqwest::StatusCode, body: &str) -> Result<()> {
+fn positive_user_id(value: &Value) -> Option<Value> {
+    let id = match value {
+        Value::Number(number) => number.as_i64()?,
+        Value::String(text) => text.trim().parse::<i64>().ok()?,
+        _ => return None,
+    };
+    (id > 0).then_some(Value::Number(id.into()))
+}
+
+fn validate_response(method: &str, status: reqwest::StatusCode, body: &str) -> Result<()> {
     let success = serde_json::from_str::<Value>(body)
         .ok()
         .and_then(|value| value.get("success").and_then(Value::as_bool));
     if !status.is_success() || success == Some(false) {
         let summary = body.chars().take(512).collect::<String>();
+        if method == "chatbot" && matches!(synology_error_code(body), Some(117) | Some(800)) {
+            bail!(
+                "Synology Chat Chatbot 返回失败：{summary}。Chatbot 只能发送给 Bot 可见的数字 user_id；如果要发到频道，请在 Synology Chat 创建 Incoming Webhook 并选择 Incoming 模式"
+            );
+        }
+        if method == "incoming" && matches!(synology_error_code(body), Some(404)) {
+            bail!(
+                "Synology Chat Incoming Webhook 返回失败：{summary}。当前 Token 可能是 Chatbot Token；请使用 Incoming Webhook URL，或切换到 Chatbot 模式并填写数字用户 ID"
+            );
+        }
         bail!("Synology Chat 返回失败：{summary}");
     }
     Ok(())
@@ -216,10 +202,7 @@ fn validate_response(status: reqwest::StatusCode, body: &str) -> Result<()> {
 mod tests {
     use serde_json::json;
 
-    use super::{
-        build_payload, resolve_endpoint, should_retry_as_incoming, validate_config,
-        validate_response,
-    };
+    use super::{build_payload, resolve_endpoint, validate_config, validate_response};
 
     #[test]
     fn full_webhook_url_supplies_method_and_token() {
@@ -233,29 +216,29 @@ mod tests {
     }
 
     #[test]
-    fn incoming_mode_ignores_chatbot_method_in_url() {
+    fn full_url_method_takes_precedence_over_selected_mode() {
         let endpoint = resolve_endpoint(&json!({
             "mode": "incoming",
             "base_url": "http://nas:5000/webapi/entry.cgi?api=SYNO.Chat.External&method=chatbot&version=2&token=secret"
         }))
         .unwrap();
-        assert_eq!(endpoint.method, "incoming");
+        assert_eq!(endpoint.method, "chatbot");
     }
 
     #[test]
-    fn chatbot_channel_target_is_included() {
+    fn chatbot_channel_target_is_not_supported() {
         let config = json!({ "target_type": "channel", "channel_id": "42" });
         let (method, payload) = build_payload(&config, "chatbot", "hello".into());
-        assert_eq!(method, "chatbot");
-        assert_eq!(payload["channel_id"], "42");
+        assert_eq!(method, "incoming");
+        assert_eq!(payload["text"], "hello");
     }
 
     #[test]
-    fn chatbot_user_target_keeps_ids_as_strings() {
+    fn chatbot_user_target_uses_numeric_ids() {
         let config = json!({ "target_type": "user", "user_ids": ["12", 15] });
         let (method, payload) = build_payload(&config, "chatbot", "hello".into());
         assert_eq!(method, "chatbot");
-        assert_eq!(payload["user_ids"], json!(["12", "15"]));
+        assert_eq!(payload["user_ids"], json!([12, 15]));
     }
 
     #[test]
@@ -278,12 +261,6 @@ mod tests {
     #[test]
     fn http_ok_with_synology_error_is_failure() {
         let body = r#"{"error":{"code":800,"errors":"no target"},"success":false}"#;
-        assert!(validate_response(reqwest::StatusCode::OK, body).is_err());
-    }
-
-    #[test]
-    fn chatbot_parameter_error_can_retry_as_incoming() {
-        let body = r#"{"error":{"code":117},"success":false}"#;
-        assert!(should_retry_as_incoming(reqwest::StatusCode::OK, body));
+        assert!(validate_response("chatbot", reqwest::StatusCode::OK, body).is_err());
     }
 }

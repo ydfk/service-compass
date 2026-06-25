@@ -31,8 +31,6 @@ interface ChannelSecrets {
   mode: string
   base_url: string
   token: string
-  target_type: string
-  channel_id: string
   user_ids: string
   verify_tls: boolean
   service_scope: 'all' | 'selected'
@@ -68,8 +66,6 @@ function emptySecrets(): ChannelSecrets {
     mode: 'incoming',
     base_url: '',
     token: '',
-    target_type: 'channel',
-    channel_id: '',
     user_ids: '',
     verify_tls: true,
     service_scope: 'all',
@@ -107,10 +103,6 @@ function secretsFromConfig(config: Record<string, unknown>): ChannelSecrets {
   if (typeof config.mode === 'string') value.mode = config.mode
   if (typeof config.base_url === 'string') value.base_url = config.base_url
   if (typeof config.token === 'string') value.token = config.token
-  if (typeof config.target_type === 'string') value.target_type = config.target_type
-  if (typeof config.channel_id === 'string' || typeof config.channel_id === 'number') {
-    value.channel_id = String(config.channel_id)
-  }
   if (Array.isArray(config.user_ids)) value.user_ids = config.user_ids.map(String).join(', ')
   if (typeof config.verify_tls === 'boolean') value.verify_tls = config.verify_tls
   if (Array.isArray(config.service_ids) && config.service_ids.length) {
@@ -172,22 +164,19 @@ function buildSynologyConfig(scoped: Record<string, unknown>) {
     ...scoped,
   }
   if (value.mode !== 'chatbot') return config
-  if (value.target_type === 'channel') {
-    if (!value.channel_id.trim()) {
-      message.warning('chatbot 模式必须填写频道 ID')
-      return undefined
-    }
-    return { ...config, target_type: 'channel', channel_id: value.channel_id.trim() }
-  }
-  const userIds = value.user_ids
+  const userIdTexts = value.user_ids
     .split(/[,\n，]/)
     .map((item) => item.trim())
     .filter(Boolean)
-  if (!userIds.length) {
-    message.warning('chatbot 模式必须填写至少一个用户 ID')
+  if (!userIdTexts.length) {
+    message.warning('Chatbot 模式必须填写至少一个用户 ID')
     return undefined
   }
-  return { ...config, target_type: 'user', user_ids: userIds }
+  if (userIdTexts.some((item) => !/^\d+$/.test(item) || Number(item) <= 0)) {
+    message.warning('Chatbot 用户 ID 必须是 Synology Chat 中的数字 user_id')
+    return undefined
+  }
+  return { ...config, target_type: 'user', user_ids: userIdTexts.map(Number) }
 }
 
 function serviceScopeConfig() {
@@ -295,8 +284,8 @@ onMounted(load)
           <NSelect
             v-model:value="secrets.mode"
             :options="[
-              { label: 'Incoming Webhook（推荐）', value: 'incoming' },
-              { label: 'Chatbot（指定频道或用户）', value: 'chatbot' },
+              { label: 'Incoming Webhook（发送到固定频道，推荐）', value: 'incoming' },
+              { label: 'Chatbot（发送给指定用户）', value: 'chatbot' },
             ]"
           />
         </NFormItem>
@@ -306,23 +295,12 @@ onMounted(load)
         <NFormItem label="Token（完整 URL 已包含时可不填）">
           <NInput v-model:value="secrets.token" placeholder="填写 Synology Chat Token" />
         </NFormItem>
-        <div v-if="secrets.mode === 'chatbot'" class="two-columns">
-          <NFormItem label="发送目标">
-            <NSelect
-              v-model:value="secrets.target_type"
-              :options="[
-                { label: '频道', value: 'channel' },
-                { label: '用户', value: 'user' },
-              ]"
-            />
-          </NFormItem>
-          <NFormItem v-if="secrets.target_type === 'channel'" label="频道 ID">
-            <NInput v-model:value="secrets.channel_id" placeholder="填写频道 ID" />
-          </NFormItem>
-          <NFormItem v-if="secrets.target_type === 'user'" label="用户 ID（逗号或换行分隔）">
-            <NInput v-model:value="secrets.user_ids" placeholder="例如：12, 15" />
-          </NFormItem>
-        </div>
+        <NFormItem v-if="secrets.mode === 'chatbot'" label="用户 ID（逗号或换行分隔）">
+          <NInput v-model:value="secrets.user_ids" placeholder="例如：5, 12" />
+        </NFormItem>
+        <p v-if="secrets.mode === 'chatbot'" class="form-tip">
+          Chatbot 只能发送给 Bot 可见的数字 user_id；如果要发到频道，请在 Synology Chat 创建 Incoming Webhook 并选择 Incoming 模式。
+        </p>
         <NFormItem label="TLS 校验"><NSwitch v-model:value="secrets.verify_tls" /></NFormItem>
       </template>
 
@@ -379,5 +357,6 @@ onMounted(load)
 .scope-row, .footer-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .service-select { margin-top: 0.75rem; }
 .footer-row label { display: flex; align-items: center; gap: 0.45rem; color: var(--sc-muted); }
+.form-tip { margin: -0.35rem 0 0.85rem; color: var(--sc-muted); font-size: 0.78rem; line-height: 1.55; }
 @media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } .two-columns { grid-template-columns: 1fr; } .scope-row, .footer-row { align-items: stretch; flex-direction: column; } }
 </style>
