@@ -39,8 +39,18 @@ struct MonitorTrack {
     status: String,
     uptime_percent: Option<f64>,
     segments: Vec<String>,
+    segment_details: Vec<TrackSegment>,
     last_checked_at: Option<String>,
     last_latency_ms: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct TrackSegment {
+    status: String,
+    checked_at: String,
+    latency_ms: Option<i64>,
+    status_code: Option<i64>,
+    message: Option<String>,
 }
 
 type MonitorSummary = (
@@ -49,6 +59,15 @@ type MonitorSummary = (
     String,
     String,
     Option<String>,
+    Option<i64>,
+    Option<String>,
+);
+
+type CheckSummary = (
+    String,
+    String,
+    String,
+    Option<i64>,
     Option<i64>,
     Option<String>,
 );
@@ -87,8 +106,9 @@ async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::
     .fetch_all(&state.pool)
     .await?;
     let cutoff = (Utc::now() - Duration::hours(24)).to_rfc3339();
-    let checks: Vec<(String, String)> = sqlx::query_as(
-        "SELECT monitor_id, status FROM monitor_checks WHERE checked_at >= ? ORDER BY checked_at",
+    let checks: Vec<CheckSummary> = sqlx::query_as(
+        "SELECT monitor_id, status, checked_at, latency_ms, status_code, error_message \
+         FROM monitor_checks WHERE checked_at >= ? ORDER BY checked_at",
     )
     .bind(cutoff)
     .fetch_all(&state.pool)
@@ -112,7 +132,7 @@ async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::
 fn dashboard_service(
     service: Service,
     monitors: &[MonitorSummary],
-    checks: &[(String, String)],
+    checks: &[CheckSummary],
 ) -> DashboardService {
     let related = monitors
         .iter()
@@ -139,30 +159,41 @@ fn dashboard_service(
     }
 }
 
-fn monitor_track(summary: &MonitorSummary, checks: &[(String, String)]) -> MonitorTrack {
-    let statuses = checks
+fn monitor_track(summary: &MonitorSummary, checks: &[CheckSummary]) -> MonitorTrack {
+    let details = checks
         .iter()
         .filter(|item| item.0 == summary.0)
-        .map(|item| item.1.clone())
+        .map(|item| TrackSegment {
+            status: item.1.clone(),
+            checked_at: item.2.clone(),
+            latency_ms: item.3,
+            status_code: item.4,
+            message: item.5.clone(),
+        })
         .collect::<Vec<_>>();
-    let total = statuses.len();
-    let up = statuses
+    let total = details.len();
+    let up = details
         .iter()
-        .filter(|status| status.as_str() == "up")
+        .filter(|item| item.status.as_str() == "up")
         .count();
+    let segment_details = details
+        .into_iter()
+        .rev()
+        .take(30)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>();
     MonitorTrack {
         id: summary.0.clone(),
         monitor_type: summary.2.clone(),
         status: summary.3.clone(),
         uptime_percent: (total > 0).then(|| up as f64 / total as f64 * 100.0),
-        segments: statuses
-            .into_iter()
-            .rev()
-            .take(30)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
+        segments: segment_details
+            .iter()
+            .map(|item| item.status.clone())
             .collect(),
+        segment_details,
         last_checked_at: summary.4.clone(),
         last_latency_ms: summary.5,
     }

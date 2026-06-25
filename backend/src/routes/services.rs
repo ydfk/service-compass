@@ -265,8 +265,5 @@ fn validate(input: &ServiceInput) -> AppResult<()> {
             "访问模式必须是 local 或 public".into(),
         ));
     }
-    if input.local_url.is_none() && input.public_url.is_none() {
-        return Err(AppError::Validation("至少需要填写一个访问地址".into()));
-    }
     Ok(())
 }

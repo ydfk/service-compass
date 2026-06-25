@@ -115,15 +115,29 @@ async function createGroup() {
 
 watch(dockerEnabled, (value) => {
   if (value) return
-  form.value.docker_endpoint_id = null
+  clearDockerSelection(true)
+  candidates.value = []
+  selectedCandidate.value = null
+})
+
+watch(
+  () => form.value.docker_endpoint_id,
+  (value, oldValue) => {
+    if (!show.value || !oldValue || value === oldValue) return
+    clearDockerSelection(false)
+    candidates.value = []
+    selectedCandidate.value = null
+  },
+)
+
+function clearDockerSelection(clearEndpoint: boolean) {
+  if (clearEndpoint) form.value.docker_endpoint_id = null
   form.value.docker_container_id = null
   form.value.docker_name = null
   form.value.docker_image = null
   form.value.docker_compose_project = null
   form.value.docker_compose_service = null
-  candidates.value = []
-  selectedCandidate.value = null
-})
+}
 
 async function scan() {
   if (!form.value.docker_endpoint_id) return message.warning('请先选择 Docker 端点')
@@ -168,7 +182,7 @@ function endpointSaved(endpoint: DockerEndpoint) {
     <NForm label-placement="top" size="small">
       <div class="form-grid">
         <NFormItem label="服务名称" class="span-2"><NInput v-model:value="form.name" placeholder="例如：Home Assistant" /></NFormItem>
-        <NFormItem label="外网地址"><NInput v-model:value="form.public_url" placeholder="https://service.example.com" /></NFormItem>
+        <NFormItem label="外网地址（可选）"><NInput v-model:value="form.public_url" placeholder="https://service.example.com" /></NFormItem>
         <NFormItem label="内网地址（可选）"><NInput v-model:value="form.local_url" placeholder="http://192.168.1.10:8080" /></NFormItem>
         <NFormItem label="分组（可选）">
           <div class="select-with-action">

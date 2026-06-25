@@ -54,8 +54,18 @@ const columns: DataTableColumns<Service> = [
     key: 'group_id',
     render: (row) => groups.value.find((item) => item.id === row.group_id)?.name ?? '未分组',
   },
-  { title: '外网地址', key: 'public_url', ellipsis: { tooltip: true } },
-  { title: '内网地址', key: 'local_url', ellipsis: { tooltip: true } },
+  {
+    title: '外网地址',
+    key: 'public_url',
+    ellipsis: { tooltip: true },
+    render: (row) => row.public_url || '—',
+  },
+  {
+    title: '内网地址',
+    key: 'local_url',
+    ellipsis: { tooltip: true },
+    render: (row) => row.local_url || '—',
+  },
   {
     title: '监控',
     key: 'monitor',
@@ -70,18 +80,23 @@ const columns: DataTableColumns<Service> = [
     render: (row) =>
       h(NSpace, null, {
         default: () => [
-          action(Edit, '编辑', () => openService(row)),
-          action(Copy, '克隆', () => cloneService(row)),
-          action(Trash, '删除', () => removeService(row)),
+          action(Edit, '编辑', 'info', () => openService(row)),
+          action(Copy, '克隆', 'warning', () => cloneService(row)),
+          action(Trash, '删除', 'error', () => removeService(row)),
         ],
       }),
   },
 ]
 
-function action(icon: typeof Edit, label: string, onClick: () => void) {
+function action(
+  icon: typeof Edit,
+  label: string,
+  type: 'info' | 'warning' | 'error',
+  onClick: () => void,
+) {
   return h(
     NButton,
-    { size: 'small', quaternary: true, onClick },
+    { size: 'small', secondary: true, type, onClick },
     { icon: () => h(NIcon, { component: icon }), default: () => label },
   )
 }
@@ -145,8 +160,6 @@ function cloneService(service: Service) {
 
 async function saveService() {
   if (!serviceForm.value.name.trim()) return message.warning('请填写服务名称')
-  if (!serviceForm.value.local_url && !serviceForm.value.public_url)
-    return message.warning('至少填写一个访问地址')
   const input = {
     ...serviceForm.value,
     monitor: serviceForm.value.create_monitor ? httpMonitor.value : null,

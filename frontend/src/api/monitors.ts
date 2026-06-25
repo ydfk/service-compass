@@ -16,7 +16,7 @@ export const monitorsApi = {
     api<Monitor>(`/api/monitors/${id}`, request('PUT', input)),
   remove: (id: string) => api<{ ok: boolean }>(`/api/monitors/${id}`, { method: 'DELETE' }),
   test: (id: string) => api<CheckResult>(`/api/monitors/${id}/test`, { method: 'POST' }),
-  checks: (id: string) => api<MonitorCheck[]>(`/api/monitors/${id}/checks?limit=100`),
+  checks: (id: string) => api<MonitorCheck[]>(`/api/monitors/${id}/checks?limit=500`),
 }
 
 function request(method: string, input: MonitorInput): RequestInit {

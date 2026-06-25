@@ -75,17 +75,17 @@ onMounted(load)
     Docker Socket 即使只读挂载也拥有很高权限。只在可信内网使用，远程 API 应启用 TLS。
   </NAlert>
   <section class="endpoint-grid">
-    <NCard v-for="endpoint in endpoints" :key="endpoint.id" size="small">
+    <NCard v-for="endpoint in endpoints" :key="endpoint.id" size="small" class="endpoint-card">
       <div class="endpoint-title">
         <NIcon :component="BrandDocker" />
         <div><strong>{{ endpoint.name }}</strong><small>{{ endpoint.endpoint_url }}</small></div>
         <NTag size="small" :type="endpoint.tls_enabled ? 'success' : 'default'">{{ endpoint.tls_enabled ? 'TLS' : endpoint.endpoint_type }}</NTag>
       </div>
-      <NSpace>
-        <NButton size="small" @click="testEndpoint(endpoint)"><template #icon><NIcon :component="PlugConnected" /></template>测试</NButton>
-        <NButton size="small" type="primary" :loading="scanning" @click="scan(endpoint)"><template #icon><NIcon :component="ChartRadar" /></template>扫描候选</NButton>
-        <NButton size="small" quaternary @click="openEndpoint(endpoint)"><NIcon :component="Edit" /></NButton>
-        <NButton size="small" quaternary @click="removeEndpoint(endpoint)"><NIcon :component="Trash" /></NButton>
+      <NSpace size="small" class="endpoint-actions">
+        <NButton size="small" secondary type="success" @click="testEndpoint(endpoint)"><template #icon><NIcon :component="PlugConnected" /></template>测试</NButton>
+        <NButton size="small" type="primary" :loading="scanning" @click="scan(endpoint)"><template #icon><NIcon :component="ChartRadar" /></template>扫描</NButton>
+        <NButton size="small" secondary type="info" @click="openEndpoint(endpoint)"><NIcon :component="Edit" /></NButton>
+        <NButton size="small" secondary type="error" @click="removeEndpoint(endpoint)"><NIcon :component="Trash" /></NButton>
       </NSpace>
     </NCard>
   </section>
@@ -104,10 +104,13 @@ onMounted(load)
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .endpoint-title small { color: #75859b; }
 .risk { margin-bottom: 1rem; }
-.endpoint-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1rem; margin-bottom: 1.2rem; }
-.endpoint-title { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; font-size: 1.35rem; }
+.endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
+.endpoint-card :deep(.n-card__content) { padding: 0.75rem; }
+.endpoint-title { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.65rem; min-width: 0; font-size: 1rem; }
 .endpoint-title div { display: grid; flex: 1; min-width: 0; font-size: 0.9rem; }
-.endpoint-title small { overflow: hidden; font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; text-overflow: ellipsis; }
+.endpoint-title strong, .endpoint-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.endpoint-title small { font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; }
+.endpoint-actions { flex-wrap: nowrap; }
 .candidate-tip { margin-bottom: 0.8rem; }
 .candidate-tip a { color: #5da9ff; }
 @media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } }

@@ -117,9 +117,6 @@ async function openClone(service: Service) {
 
 async function saveService() {
   if (!serviceForm.value.name.trim()) return
-  if (!serviceForm.value.local_url && !serviceForm.value.public_url) {
-    return message.warning('至少填写一个访问地址')
-  }
   const input = {
     ...serviceForm.value,
     monitor: serviceForm.value.create_monitor ? httpMonitor.value : null,

@@ -130,6 +130,30 @@ async fn service_can_be_created_without_group_and_with_monitor() {
 }
 
 #[tokio::test]
+async fn service_can_be_created_without_urls() {
+    let app = test_app().await;
+    let token = login_token(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::post("/api/services")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"group_id":null,"name":"Only Display","preferred_url_mode":"public","icon_type":"initial","enabled":true,"sort_order":0,"create_monitor":false,"cert_expiry_notify":false}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(payload["public_url"].is_null());
+    assert!(payload["local_url"].is_null());
+}
+
+#[tokio::test]
 async fn notification_channel_with_bad_secret_does_not_break_list() {
     let state = test_state().await;
     sqlx::query(

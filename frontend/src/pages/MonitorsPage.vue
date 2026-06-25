@@ -4,6 +4,8 @@ import {
   NButton,
   NCard,
   NDataTable,
+  NDescriptions,
+  NDescriptionsItem,
   NDrawer,
   NDrawerContent,
   NForm,
@@ -15,6 +17,7 @@ import {
   NSpace,
   NStatistic,
   NSwitch,
+  NTag,
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
@@ -24,6 +27,7 @@ import { monitorsApi } from '../api/monitors'
 import { notificationsApi } from '../api/notifications'
 import { servicesApi } from '../api/services'
 import StatusBadge from '../components/StatusBadge.vue'
+import StatusStrip from '../components/StatusStrip.vue'
 import type {
   Group,
   Monitor,
@@ -31,7 +35,7 @@ import type {
   MonitorInput,
   NotificationChannel,
   Service,
-  Status,
+  StatusPoint,
 } from '../types'
 import { monitorToInput, UNGROUPED_ID } from '../utils/serviceForms'
 
@@ -70,12 +74,18 @@ const channelOptions = computed(() =>
   channels.value.map((item) => ({ label: item.name, value: item.id })),
 )
 const filteredMonitors = computed(() =>
-  monitors.value.filter((monitor) => {
-    if (selectedServiceId.value) return monitor.service_id === selectedServiceId.value
-    if (!selectedGroupId.value) return true
-    const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
-    return service?.group_id === selectedGroupId.value
-  }),
+  monitors.value
+    .filter((monitor) => {
+      if (selectedServiceId.value) return monitor.service_id === selectedServiceId.value
+      if (!selectedGroupId.value) return true
+      const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
+      return service?.group_id === selectedGroupId.value
+    })
+    .sort(
+      (left, right) =>
+        serviceScope(left).localeCompare(serviceScope(right)) ||
+        left.name.localeCompare(right.name),
+    ),
 )
 const stats = computed(() => ({
   total: filteredMonitors.value.length,
@@ -91,7 +101,7 @@ const columns: DataTableColumns<Monitor> = [
     title: '服务 / 分组',
     key: 'service',
     ellipsis: { tooltip: true },
-    render: (row) => serviceScope(row),
+    render: (row) => serviceCell(row),
   },
   {
     title: '类型',
@@ -102,7 +112,8 @@ const columns: DataTableColumns<Monitor> = [
   {
     title: '状态条',
     key: 'recent_statuses',
-    render: (row) => hStatusStrip(row.recent_statuses),
+    render: (row) =>
+      h('div', { class: 'table-strip' }, [h(StatusStrip, { points: monitorPoints(row) })]),
   },
   {
     title: '最近日志',
@@ -122,9 +133,11 @@ const columns: DataTableColumns<Monitor> = [
     render: (row) =>
       h(NSpace, null, {
         default: () => [
-          button(PlayerPlay, '测试', () => test(row)),
-          button(History, '日志', () => showHistory(row)),
-          button(Bell, row.notify_enabled ? '通知已开' : '通知', () => openNotification(row)),
+          button(PlayerPlay, '测试', 'success', () => test(row)),
+          button(History, '详情', 'info', () => showHistory(row)),
+          button(Bell, row.notify_enabled ? '通知已开' : '通知', 'warning', () =>
+            openNotification(row),
+          ),
         ],
       }),
   },
@@ -148,21 +161,64 @@ const checkColumns: DataTableColumns<MonitorCheck> = [
   },
 ]
 
-function button(icon: typeof Bell, label: string, onClick: () => void) {
+const drawerPoints = computed(() => [...checks.value].reverse().map(checkPoint))
+const drawerStats = computed(() => {
+  const total = checks.value.length
+  const up = checks.value.filter((item) => item.status === 'up').length
+  const latencies = checks.value
+    .filter((item) => item.latency_ms != null)
+    .map((item) => item.latency_ms ?? 0)
+  return {
+    uptime: total ? `${((up / total) * 100).toFixed(2)}%` : '等待数据',
+    avgLatency: latencies.length
+      ? `${Math.round(latencies.reduce((sum, item) => sum + item, 0) / latencies.length)} ms`
+      : '—',
+    total,
+  }
+})
+const latencyPath = computed(() => {
+  const values = [...checks.value]
+    .reverse()
+    .filter((item) => item.latency_ms != null)
+    .slice(-80)
+  if (values.length < 2) return ''
+  const max = Math.max(...values.map((item) => item.latency_ms ?? 0), 1)
+  return values
+    .map((item, index) => {
+      const x = (index / (values.length - 1)) * 100
+      const y = 100 - ((item.latency_ms ?? 0) / max) * 86 - 7
+      return `${x.toFixed(2)},${y.toFixed(2)}`
+    })
+    .join(' ')
+})
+
+function button(
+  icon: typeof Bell,
+  label: string,
+  type: 'success' | 'info' | 'warning',
+  onClick: () => void,
+) {
   return h(
     NButton,
-    { size: 'small', quaternary: true, onClick },
+    { size: 'small', secondary: true, type, onClick },
     { icon: () => h(NIcon, { component: icon }), default: () => label },
   )
 }
 
-function hStatusStrip(statuses: Status[]) {
-  const values = statuses.length ? statuses : ['unknown']
-  return h(
-    'div',
-    { class: 'monitor-status-strip', title: '最近 30 次检查' },
-    values.map((status, index) => h('i', { key: index, class: status })),
-  )
+function monitorPoints(monitor: Monitor): StatusPoint[] {
+  const checks = [...monitor.recent_checks].reverse()
+  if (checks.length) return checks.map(checkPoint)
+  return monitor.recent_statuses.map((status) => ({ status }))
+}
+
+function checkPoint(check: MonitorCheck): StatusPoint {
+  return {
+    status: check.status,
+    checked_at: check.checked_at,
+    latency_ms: check.latency_ms,
+    status_code: check.status_code,
+    message: check.error_message || briefExtra(check),
+  }
 }
 
 function recentLog(monitor: Monitor) {
@@ -181,6 +237,27 @@ function serviceScope(monitor: Monitor) {
   if (!service) return '未关联服务'
   const group = groupById.value.get(service.group_id)
   return `${service.name} / ${group?.name || '未分组'}`
+}
+
+function serviceCell(monitor: Monitor) {
+  const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
+  if (!service) return h('span', { class: 'service-cell muted' }, '未关联服务')
+  const group = groupById.value.get(service.group_id)
+  return h('div', { class: 'service-cell' }, [
+    h('strong', service.name),
+    h('small', group?.name || '未分组'),
+  ])
+}
+
+function monitorRowClass(row: Monitor) {
+  const index = filteredMonitors.value.findIndex((item) => item.id === row.id)
+  const current = row.service_id || row.id
+  const previous = filteredMonitors.value[index - 1]?.service_id
+  const next = filteredMonitors.value[index + 1]?.service_id
+  return [
+    previous === current ? 'same-service-cont' : '',
+    next === current ? 'same-service-next' : '',
+  ].join(' ')
 }
 
 function briefExtra(check: MonitorCheck) {
@@ -317,6 +394,7 @@ onMounted(load)
     :data="filteredMonitors"
     :loading="loading"
     :row-key="(row: Monitor) => row.id"
+    :row-class-name="monitorRowClass"
   />
 
   <NModal v-model:show="notificationModal" preset="card" title="监控通知设置" class="notify-monitor-modal">
@@ -347,8 +425,50 @@ onMounted(load)
     </NForm>
   </NModal>
 
-  <NDrawer v-model:show="historyDrawer" :width="820">
+  <NDrawer v-model:show="historyDrawer" :width="980">
     <NDrawerContent :title="selectedMonitor ? `${selectedMonitor.name} · 检查日志` : '检查日志'">
+      <section v-if="selectedMonitor" class="monitor-detail">
+        <div class="detail-head">
+          <div>
+            <small>{{ serviceScope(selectedMonitor) }}</small>
+            <h2>{{ selectedMonitor.name }}</h2>
+          </div>
+          <StatusBadge :status="selectedMonitor.current_status" />
+        </div>
+
+        <NCard size="small" class="status-card">
+          <div class="status-card-head">
+            <span>最近检查状态</span>
+            <NTag size="small" :bordered="false">{{ drawerStats.total }} 次记录</NTag>
+          </div>
+          <StatusStrip :points="drawerPoints" title="最近检查状态" />
+        </NCard>
+
+        <div class="detail-stats">
+          <NCard size="small"><NStatistic label="在线时间（当前样本）" :value="drawerStats.uptime" /></NCard>
+          <NCard size="small"><NStatistic label="平均响应" :value="drawerStats.avgLatency" /></NCard>
+          <NCard size="small"><NStatistic label="检查间隔" :value="`${selectedMonitor.interval_sec} 秒`" /></NCard>
+        </div>
+
+        <NCard size="small" class="latency-card">
+          <div class="status-card-head">
+            <span>平均 Ping 延迟</span>
+            <small>最近 {{ checks.filter((item) => item.latency_ms != null).length }} 个有效样本</small>
+          </div>
+          <svg v-if="latencyPath" viewBox="0 0 100 100" preserveAspectRatio="none" class="latency-chart">
+            <polyline :points="`0,100 ${latencyPath} 100,100`" class="latency-fill" />
+            <polyline :points="latencyPath" class="latency-line" />
+          </svg>
+          <div v-else class="empty-chart">暂无延迟数据</div>
+        </NCard>
+
+        <NDescriptions :column="2" size="small" label-placement="left" class="monitor-meta">
+          <NDescriptionsItem label="类型">{{ selectedMonitor.monitor_type.toUpperCase() }}</NDescriptionsItem>
+          <NDescriptionsItem label="目标">{{ selectedMonitor.target_url || selectedMonitor.domain || '随服务地址' }}</NDescriptionsItem>
+          <NDescriptionsItem label="上次检查">{{ selectedMonitor.last_checked_at ? new Date(selectedMonitor.last_checked_at).toLocaleString() : '等待首次检查' }}</NDescriptionsItem>
+          <NDescriptionsItem label="最近错误">{{ selectedMonitor.last_error || '—' }}</NDescriptionsItem>
+        </NDescriptions>
+      </section>
       <NDataTable :columns="checkColumns" :data="checks" size="small" />
     </NDrawerContent>
   </NDrawer>
@@ -388,27 +508,25 @@ onMounted(load)
 .filter-select {
   width: 14rem;
 }
-:deep(.monitor-status-strip) {
-  display: flex;
-  width: min(12rem, 100%);
-  height: 0.55rem;
-  gap: 2px;
-}
-:deep(.monitor-status-strip i) {
-  min-width: 2px;
-  flex: 1;
-  border-radius: 1px;
-  background: #334155;
-}
-:deep(.monitor-status-strip i.up) {
-  background: #34d399;
-}
-:deep(.monitor-status-strip i.down) {
-  background: #fb7185;
-}
-:deep(.monitor-status-strip i.warning) {
-  background: #fbbf24;
-}
+:deep(.table-strip) { width: min(13rem, 100%); }
+:deep(.same-service-cont td) { border-top-color: transparent !important; }
+:deep(.same-service-next td:first-child) { border-bottom-left-radius: 0; }
+:deep(.service-cell) { display: grid; gap: 0.12rem; line-height: 1.2; }
+:deep(.service-cell strong) { font-size: 0.82rem; }
+:deep(.service-cell small) { color: var(--sc-muted); font-size: 0.68rem; }
+:deep(.service-cell.muted) { color: var(--sc-muted); }
+.monitor-detail { display: grid; gap: 0.85rem; margin-bottom: 1rem; }
+.detail-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+.detail-head small { color: var(--sc-muted); }
+.detail-head h2 { margin: 0.2rem 0 0; font-size: 1.8rem; }
+.status-card, .latency-card { background: var(--sc-card); }
+.status-card-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; color: var(--sc-muted); font-size: 0.78rem; }
+.detail-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.latency-chart { width: 100%; height: 12rem; border-bottom: 1px solid rgb(148 163 184 / 18%); }
+.latency-line { fill: none; stroke: #4ade80; stroke-width: 2.2; vector-effect: non-scaling-stroke; }
+.latency-fill { fill: rgb(74 222 128 / 16%); stroke: none; }
+.empty-chart { display: grid; height: 12rem; place-items: center; color: var(--sc-muted); }
+.monitor-meta { padding: 0.8rem; border: 1px solid var(--sc-border); border-radius: 0.75rem; }
 .notify-monitor-modal {
   width: min(36rem, calc(100vw - 2rem));
 }

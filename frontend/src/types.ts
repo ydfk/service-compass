@@ -42,8 +42,17 @@ export interface MonitorTrack {
   status: Status
   uptime_percent?: number | null
   segments: Status[]
+  segment_details?: StatusPoint[]
   last_checked_at?: string | null
   last_latency_ms?: number | null
+}
+
+export interface StatusPoint {
+  status: Status
+  checked_at?: string | null
+  latency_ms?: number | null
+  status_code?: number | null
+  message?: string | null
 }
 
 export interface DashboardGroup extends Group {

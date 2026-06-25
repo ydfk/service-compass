@@ -343,7 +343,7 @@ onMounted(load)
 .page-header p { margin: 0; color: #fbbf24; font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.2em; }
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .channel-title small { color: var(--sc-muted); }
-.channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr)); gap: 0.65rem; margin-bottom: 1rem; }
+.channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
 .channel-card :deep(.n-card__content) { padding: 0.75rem; }
 .channel-title { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.55rem; min-width: 0; }
 .channel-icon { flex: 0 0 auto; font-size: 1.05rem; }

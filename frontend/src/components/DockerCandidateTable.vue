@@ -30,6 +30,7 @@ const columns: DataTableColumns<DockerCandidate> = [
     :columns="columns"
     :data="candidates"
     :loading="loading"
+    size="small"
     :row-key="(row: DockerCandidate) => `${row.endpoint_id}:${row.container_id}`"
   />
 </template>

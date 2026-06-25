@@ -2,8 +2,9 @@
 import { ArrowLeft, ArrowRight, Copy, Edit, Photo } from '@vicons/tabler'
 import { NButton, NIcon } from 'naive-ui'
 import { computed, ref, watch } from 'vue'
-import type { MonitorTrack, Service, Status, UrlMode } from '../types'
+import type { MonitorTrack, Service, StatusPoint, UrlMode } from '../types'
 import StatusBadge from './StatusBadge.vue'
+import StatusStrip from './StatusStrip.vue'
 
 const props = defineProps<{
   service: Service
@@ -41,18 +42,22 @@ function trackLabel(track: MonitorTrack) {
   return track.monitor_type.toUpperCase()
 }
 
-function trackSegments(track: MonitorTrack): Status[] {
-  return track.segments.length ? track.segments : ['unknown']
+function trackPoints(track: MonitorTrack): StatusPoint[] {
+  if (track.segment_details?.length) return track.segment_details
+  return track.segments.map((status) => ({ status }))
 }
 </script>
 
 <template>
-  <article class="service-card" :class="[cardMode, { disabled: !activeUrl, sorting }]" @click="open">
+  <article class="service-card" :class="[cardMode, { 'no-url': !activeUrl, sorting }]" @click="open">
     <div class="service-icon">
       <img v-if="iconUrl && !iconFailed" :src="iconUrl" :alt="service.name" @error="iconFailed = true" />
       <NIcon v-else :component="Photo" />
     </div>
-    <div class="identity"><h3>{{ service.name }}</h3><p v-if="cardMode === 'detail'">{{ service.description || service.docker_image || '服务状态' }}</p></div>
+    <div class="identity">
+      <h3>{{ service.name }}</h3>
+      <p v-if="cardMode === 'detail'">{{ service.description || service.docker_image || (activeUrl ? '服务状态' : '未配置访问地址') }}</p>
+    </div>
     <StatusBadge :status="service.status" />
 
     <div v-if="cardMode === 'detail'" class="monitor-tracks">
@@ -62,11 +67,10 @@ function trackSegments(track: MonitorTrack): Status[] {
           <span><i :class="track.status" />{{ trackLabel(track) }}</span>
           <span>{{ track.uptime_percent == null ? '等待数据' : `${track.uptime_percent.toFixed(2)}%` }}<template v-if="track.last_latency_ms != null"> · {{ track.last_latency_ms }}ms</template></span>
         </div>
-        <div class="status-strip" title="过去 24 小时最近 30 次检查">
-          <i v-for="(status, segmentIndex) in trackSegments(track)" :key="segmentIndex" :class="status" />
-        </div>
+        <StatusStrip :points="trackPoints(track)" title="过去 24 小时最近 30 次检查" />
       </div>
     </div>
+    <span v-if="!activeUrl" class="no-url-badge">{{ cardMode === 'detail' ? '仅展示' : '无链接' }}</span>
 
     <div v-if="editable" class="card-tools" @click.stop>
       <template v-if="sorting">
@@ -84,7 +88,8 @@ function trackSegments(track: MonitorTrack): Status[] {
 <style scoped>
 .service-card { position: relative; display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.7rem 0.8rem; border: 1px solid var(--sc-border); border-radius: 0.8rem; background: var(--sc-card); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
 .service-card:hover { border-color: rgb(96 165 250 / 42%); background: var(--sc-card-hover); transform: translateY(-1px); }
-.service-card.disabled { cursor: default; opacity: 0.68; }
+.service-card.no-url { border-style: dashed; cursor: default; }
+.service-card.no-url::after { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, transparent, rgb(148 163 184 / 5%)); content: ""; pointer-events: none; }
 .service-card.sorting { cursor: move; border-style: dashed; }
 .service-card.detail { grid-template-columns: 3rem minmax(0, 1fr) auto; align-content: start; min-height: 11.5rem; padding: 1rem; }
 .service-icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 0.6rem; background: var(--sc-icon-bg); font-size: 1.2rem; }
@@ -100,10 +105,8 @@ h3 { margin: 0; overflow: hidden; font-size: 0.95rem; text-overflow: ellipsis; w
 .track-meta span { display: flex; align-items: center; gap: 0.35rem; }
 .track-meta i { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: #64748b; }
 .track-meta i.up { background: #34d399; }.track-meta i.down { background: #fb7185; }.track-meta i.warning { background: #fbbf24; }
-.status-strip { display: flex; height: 0.48rem; gap: 2px; }
-.status-strip i { min-width: 2px; flex: 1; border-radius: 1px; background: #334155; }
-.status-strip i.up { background: #34d399; }.status-strip i.down { background: #fb7185; }.status-strip i.warning { background: #fbbf24; }
 .no-monitor { padding: 0.65rem; border: 1px dashed rgb(148 163 184 / 15%); border-radius: 0.5rem; color: var(--sc-muted); font-size: 0.72rem; text-align: center; }
+.no-url-badge { position: absolute; right: 0.75rem; bottom: 0.55rem; color: var(--sc-subtle); font-size: 0.66rem; }
 .card-tools { position: absolute; top: -0.45rem; right: -0.45rem; display: flex; border: 1px solid rgb(148 163 184 / 18%); border-radius: 999px; background: var(--sc-surface); }
 @media (hover: hover) { .card-tools { opacity: 0; transition: opacity 160ms ease; } .service-card:hover .card-tools, .card-tools:focus-within { opacity: 1; } }
 </style>

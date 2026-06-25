@@ -145,9 +145,6 @@ async fn add_candidate(
     let name = input.name.as_deref().unwrap_or(&candidate.suggested_name);
     let local_url = input.local_url.or(candidate.local_url);
     let public_url = input.public_url.or(candidate.public_url);
-    if local_url.is_none() && public_url.is_none() {
-        return Err(AppError::Validation("候选服务没有可访问地址".into()));
-    }
     let mut transaction = state.pool.begin().await?;
     sqlx::query(
         "INSERT INTO services (id, group_id, name, icon_type, icon_value, local_url, public_url, \
