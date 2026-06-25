@@ -105,12 +105,8 @@ async fn test_channel(
 ) -> AppResult<Json<notify::SendResult>> {
     let channel = find_channel(&state, &id).await?;
     tracing::info!(channel_id = %id, channel_type = %channel.channel_type, "开始测试通知通道");
-    let decrypted = state
-        .secrets
-        .decrypt(&channel.config_secret)
-        .map_err(AppError::Internal)?;
-    let config: Value =
-        serde_json::from_str(&decrypted).map_err(|error| AppError::Internal(error.into()))?;
+    let config = decrypt_channel_config(&state, &channel)
+        .map_err(|_| AppError::Validation("通知通道配置无法解密，请重新保存通道配置".into()))?;
     let event = NotificationEvent {
         event_type: "test".into(),
         monitor_id: "test".into(),
@@ -186,12 +182,25 @@ fn channel_view(
     state: &AppState,
     row: NotificationChannelRow,
 ) -> AppResult<NotificationChannelView> {
-    let decrypted = state
-        .secrets
-        .decrypt(&row.config_secret)
-        .map_err(AppError::Internal)?;
-    let config =
-        serde_json::from_str(&decrypted).map_err(|error| AppError::Internal(error.into()))?;
+    let config = match decrypt_channel_config(state, &row) {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::warn!(
+                channel_id = %row.id,
+                channel_type = %row.channel_type,
+                ?error,
+                "通知通道配置无法解密，返回未配置状态"
+            );
+            return Ok(NotificationChannelView {
+                id: row.id,
+                name: row.name,
+                channel_type: row.channel_type,
+                enabled: row.enabled,
+                configured: false,
+                config: serde_json::json!({}),
+            });
+        }
+    };
     Ok(NotificationChannelView {
         id: row.id,
         name: row.name,
@@ -200,6 +209,11 @@ fn channel_view(
         configured: true,
         config,
     })
+}
+
+fn decrypt_channel_config(state: &AppState, row: &NotificationChannelRow) -> anyhow::Result<Value> {
+    let decrypted = state.secrets.decrypt(&row.config_secret)?;
+    serde_json::from_str(&decrypted).map_err(Into::into)
 }
 
 async fn save_channel(
