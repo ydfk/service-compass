@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BrandDocker, ChartRadar, Edit, PlugConnected, Plus, Trash } from '@vicons/tabler'
-import { NAlert, NButton, NCard, NIcon, NSpace, NTag, useDialog, useMessage } from 'naive-ui'
+import { NAlert, NButton, NCard, NIcon, NSpace, useDialog, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { dockerApi } from '../api/docker'
@@ -58,6 +58,12 @@ function removeEndpoint(endpoint: DockerEndpoint) {
   })
 }
 
+function endpointTypeText(endpoint: DockerEndpoint) {
+  if (endpoint.tls_enabled) return 'TLS'
+  if (endpoint.endpoint_type === 'local_socket') return '本机 Socket'
+  return '远程 TCP'
+}
+
 onMounted(load)
 </script>
 
@@ -80,7 +86,7 @@ onMounted(load)
       <div class="endpoint-title">
         <NIcon :component="BrandDocker" />
         <div><strong>{{ endpoint.name }}</strong><small>{{ endpoint.endpoint_url }}</small></div>
-        <NTag size="small" :type="endpoint.tls_enabled ? 'success' : 'default'">{{ endpoint.tls_enabled ? 'TLS' : endpoint.endpoint_type }}</NTag>
+        <span class="endpoint-kind" :class="{ secure: endpoint.tls_enabled }">{{ endpointTypeText(endpoint) }}</span>
       </div>
       <NSpace size="small" class="endpoint-actions">
         <NButton size="small" secondary type="success" @click="testEndpoint(endpoint)"><template #icon><NIcon :component="PlugConnected" /></template>测试</NButton>
@@ -105,14 +111,17 @@ onMounted(load)
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .endpoint-title small { color: #75859b; }
 .risk { margin-bottom: 1rem; }
-.endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
-.endpoint-card :deep(.n-card__content) { padding: 0.75rem; }
-.endpoint-title { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.65rem; min-width: 0; font-size: 1rem; }
+.endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 0.85rem; margin-bottom: 1rem; }
+.endpoint-card { min-height: 8.2rem; }
+.endpoint-card :deep(.n-card__content) { display: grid; min-height: 8.2rem; align-content: space-between; padding: 0.9rem; }
+.endpoint-title { display: flex; align-items: flex-start; gap: 0.65rem; margin-bottom: 0.8rem; min-width: 0; font-size: 1rem; }
 .endpoint-title div { display: grid; flex: 1; min-width: 0; font-size: 0.9rem; }
-.endpoint-title strong, .endpoint-title small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.endpoint-title small { font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; }
-.endpoint-actions { flex-wrap: nowrap; }
+.endpoint-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.endpoint-title small { overflow-wrap: anywhere; color: var(--sc-muted); font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; line-height: 1.45; }
+.endpoint-kind { flex: 0 0 auto; padding: 0.2rem 0.5rem; border: 1px solid rgb(148 163 184 / 18%); border-radius: 999px; background: rgb(148 163 184 / 8%); color: var(--sc-muted); font-size: 0.66rem; line-height: 1; }
+.endpoint-kind.secure { border-color: rgb(52 211 153 / 24%); background: rgb(52 211 153 / 10%); color: var(--sc-success); }
+.endpoint-actions { flex-wrap: wrap; }
 .candidate-tip { margin-bottom: 0.8rem; }
 .candidate-tip a { color: #5da9ff; }
-@media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } .endpoint-grid { grid-template-columns: 1fr; } }
 </style>

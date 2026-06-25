@@ -94,12 +94,14 @@ function trackPoints(track: MonitorTrack): StatusPoint[] {
 <style scoped>
 .service-card { position: relative; display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.7rem 0.8rem; border: 1px solid var(--sc-border); border-radius: 0.8rem; background: var(--sc-card); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
 .service-card:hover { border-color: rgb(96 165 250 / 42%); background: var(--sc-card-hover); transform: translateY(-1px); }
-.service-card.no-url { border-style: dashed; cursor: default; }
-.service-card.no-url::after { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, transparent, rgb(148 163 184 / 5%)); content: ""; pointer-events: none; }
+.service-card.no-url { border-color: rgb(148 163 184 / 20%); border-style: dashed; background: linear-gradient(135deg, rgb(148 163 184 / 8%), transparent 55%), var(--sc-card); cursor: default; }
+.service-card.no-url:hover { border-color: rgb(148 163 184 / 26%); background: linear-gradient(135deg, rgb(148 163 184 / 10%), transparent 55%), var(--sc-card); transform: none; }
+.service-card.no-url::after { position: absolute; inset: 0; border-radius: inherit; background: repeating-linear-gradient(135deg, transparent 0 0.55rem, rgb(148 163 184 / 4%) 0.55rem 0.7rem); content: ""; pointer-events: none; }
 .service-card.sorting { cursor: move; border-style: dashed; }
 .service-card.detail { grid-template-columns: 3rem minmax(0, 1fr) auto; align-content: start; min-height: 11.5rem; padding: 1rem; }
 .service-icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border: 1px solid var(--sc-border); border-radius: 0.6rem; background: var(--sc-card); font-size: 1.2rem; }
 .detail .service-icon { width: 3rem; height: 3rem; }
+.no-url .service-icon { border-style: dashed; opacity: 0.72; filter: grayscale(0.25); }
 .service-icon img { width: 72%; height: 72%; object-fit: contain; }
 .identity { min-width: 0; }
 h3 { margin: 0; overflow: hidden; font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -112,7 +114,7 @@ h3 { margin: 0; overflow: hidden; font-size: 0.95rem; text-overflow: ellipsis; w
 .track-meta i { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: #64748b; }
 .track-meta i.up { background: #34d399; }.track-meta i.down { background: #fb7185; }.track-meta i.warning { background: #fbbf24; }
 .no-monitor { padding: 0.65rem; border: 1px dashed rgb(148 163 184 / 15%); border-radius: 0.5rem; color: var(--sc-muted); font-size: 0.72rem; text-align: center; }
-.no-url-badge { position: absolute; right: 0.75rem; bottom: 0.55rem; color: var(--sc-subtle); font-size: 0.66rem; }
+.no-url-badge { position: absolute; right: 0.75rem; bottom: 0.55rem; padding: 0.14rem 0.45rem; border: 1px solid rgb(148 163 184 / 18%); border-radius: 999px; background: rgb(148 163 184 / 9%); color: var(--sc-muted); font-size: 0.66rem; }
 .card-tools { position: absolute; top: -0.45rem; right: -0.45rem; display: flex; border: 1px solid rgb(148 163 184 / 18%); border-radius: 999px; background: var(--sc-surface); }
 @media (hover: hover) { .card-tools { opacity: 0; transition: opacity 160ms ease; } .service-card:hover .card-tools, .card-tools:focus-within { opacity: 1; } }
 </style>

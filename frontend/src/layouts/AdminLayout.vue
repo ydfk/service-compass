@@ -36,6 +36,7 @@ const menus: MenuOption[] = [
   item('概览', '/admin', Dashboard),
   item('服务', '/admin/services', Stack2),
   item('监控', '/admin/monitors', HeartRateMonitor),
+  item('Docker', '/admin/docker', BrandDocker),
   item('通知', '/admin/notify', Bell),
   {
     label: '设置',
@@ -43,7 +44,6 @@ const menus: MenuOption[] = [
     icon: () => h(NIcon, null, { default: () => h(Settings) }),
     children: [
       item('常规与账号', '/admin/settings', Settings),
-      item('Docker', '/admin/settings/docker', BrandDocker),
       item('系统日志', '/admin/settings/logs', FileText),
     ],
   },
