@@ -17,10 +17,12 @@ import {
   NLayoutContent,
   NLayoutSider,
   NMenu,
+  NTag,
   type MenuOption,
 } from 'naive-ui'
-import { h } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { versionApi, type VersionInfo } from '../api/version'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import { useAuthStore } from '../stores/auth'
 
@@ -28,6 +30,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const mobile = useMediaQuery('(max-width: 760px)')
+const version = ref<VersionInfo | null>(null)
 
 const menus: MenuOption[] = [
   item('概览', '/admin', Dashboard),
@@ -58,6 +61,14 @@ async function logout() {
   await auth.logout()
   await router.replace('/login')
 }
+
+onMounted(async () => {
+  try {
+    version.value = await versionApi.get()
+  } catch {
+    version.value = null
+  }
+})
 </script>
 
 <template>
@@ -66,11 +77,17 @@ async function logout() {
       <RouterLink class="admin-brand" to="/"><img src="../assets/logo.svg" alt="" /><span>ServiceCompass<small>CONTROL DECK</small></span></RouterLink>
       <NMenu :value="route.path" :options="menus" />
       <div class="sider-footer">
-        <ThemeToggle />
+        <a v-if="version?.update_available" class="update-link" :href="version.release_url || '#'" target="_blank" rel="noreferrer">
+          <NTag type="warning" size="small" :bordered="false">发现新版本 {{ version.latest_version }}</NTag>
+        </a>
+        <small>v{{ version?.current_version || '0.1.0' }} · © 2026 ServiceCompass</small>
         <NButton quaternary @click="logout"><template #icon><NIcon :component="Logout" /></template>退出登录</NButton>
       </div>
     </NLayoutSider>
-    <NLayoutContent class="admin-content"><RouterView /></NLayoutContent>
+    <NLayoutContent class="admin-content">
+      <div class="top-tools"><ThemeToggle /></div>
+      <RouterView />
+    </NLayoutContent>
   </NLayout>
 </template>
 
@@ -81,7 +98,10 @@ async function logout() {
 .admin-brand img { width: 2.4rem; flex: 0 0 auto; }
 .admin-brand span { display: grid; font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; }
 .admin-brand small { color: var(--sc-subtle); font-size: 0.56rem; letter-spacing: 0.13em; }
-.sider-footer { position: absolute; bottom: 1.2rem; left: 1rem; display: grid; gap: 0.45rem; }
-.admin-content { margin-left: 240px; min-height: 100vh; padding: 2.5rem; background: var(--sc-bg); }
+.sider-footer { position: absolute; right: 1rem; bottom: 1.2rem; left: 1rem; display: grid; gap: 0.45rem; }
+.sider-footer small { color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.66rem; }
+.update-link { text-decoration: none; }
+.admin-content { position: relative; margin-left: 240px; min-height: 100vh; padding: 2.5rem; background: var(--sc-bg); }
+.top-tools { position: absolute; top: 1rem; right: 1rem; z-index: 2; }
 @media (max-width: 760px) { .admin-content { margin-left: 68px; padding: 1.2rem; } }
 </style>

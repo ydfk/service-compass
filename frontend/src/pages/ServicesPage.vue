@@ -26,6 +26,7 @@ import {
   emptyHttpMonitor,
   emptyService,
   monitorToInput,
+  serviceCertMonitor,
   serviceHttpMonitor,
   serviceToInput,
 } from '../utils/serviceForms'
@@ -124,7 +125,8 @@ function openService(service?: Service) {
   editingService.value = service ?? null
   serviceEditorTitle.value = service ? '编辑服务' : '添加服务'
   const monitor = service ? serviceHttpMonitor(monitors.value, service.id) : undefined
-  serviceForm.value = service ? serviceToInput(service, monitor) : emptyService()
+  const certMonitor = service ? serviceCertMonitor(monitors.value, service.id) : undefined
+  serviceForm.value = service ? serviceToInput(service, monitor, certMonitor) : emptyService()
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
   serviceModal.value = true
 }
@@ -133,7 +135,8 @@ function cloneService(service: Service) {
   editingService.value = null
   serviceEditorTitle.value = `克隆 ${service.name}`
   const monitor = serviceHttpMonitor(monitors.value, service.id)
-  serviceForm.value = serviceToInput(service, monitor)
+  const certMonitor = serviceCertMonitor(monitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor, certMonitor)
   serviceForm.value.name = `${service.name} 副本`
   serviceForm.value.sort_order = service.sort_order + 1
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()

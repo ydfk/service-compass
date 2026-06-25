@@ -16,11 +16,13 @@ import {
 import { computed, ref, watch } from 'vue'
 import { dockerApi } from '../api/docker'
 import { groupsApi } from '../api/groups'
+import { notificationsApi } from '../api/notifications'
 import type {
   DockerCandidate,
   DockerEndpoint,
   Group,
   MonitorInput,
+  NotificationChannel,
   ServiceInput,
   UrlMode,
 } from '../types'
@@ -35,6 +37,7 @@ const form = defineModel<ServiceInput>('form', { required: true })
 const monitor = defineModel<MonitorInput>('monitor', { required: true })
 const endpoints = ref<DockerEndpoint[]>([])
 const candidates = ref<DockerCandidate[]>([])
+const notificationChannels = ref<NotificationChannel[]>([])
 const dockerEnabled = ref(false)
 const scanning = ref(false)
 const selectedCandidate = ref<string | null>(null)
@@ -66,6 +69,15 @@ const groupOptions = computed(() => [
   { label: '未分组', value: '' },
   ...localGroups.value.map((item) => ({ label: item.name, value: item.id })),
 ])
+const monitorUrl = computed(() => {
+  if (monitor.value.target_url_mode === 'custom') return monitor.value.target_url || ''
+  if (monitor.value.target_url_mode === 'local')
+    return form.value.local_url || form.value.public_url || ''
+  return form.value.public_url || form.value.local_url || ''
+})
+const canNotifyCertificate = computed(() =>
+  monitorUrl.value.trim().toLowerCase().startsWith('https://'),
+)
 
 watch(show, async (value) => {
   if (!value) return
@@ -74,7 +86,14 @@ watch(show, async (value) => {
   localGroups.value = [...props.groups]
   addingGroup.value = false
   newGroupName.value = ''
-  endpoints.value = await dockerApi.endpoints()
+  ;[endpoints.value, notificationChannels.value] = await Promise.all([
+    dockerApi.endpoints(),
+    notificationsApi.channels(),
+  ])
+})
+
+watch(canNotifyCertificate, (value) => {
+  if (!value) form.value.cert_expiry_notify = false
 })
 
 async function createGroup() {
@@ -190,8 +209,15 @@ function endpointSaved(endpoint: DockerEndpoint) {
           v-model="monitor"
           :services="[]"
           :show-identity="false"
+          show-notification
+          :notification-channels="notificationChannels"
           :allowed-types="['http', 'http_keyword']"
         />
+        <label v-if="form.create_monitor" class="cert-toggle" :class="{ disabled: !canNotifyCertificate }">
+          <NSwitch v-model:value="form.cert_expiry_notify" :disabled="!canNotifyCertificate" />
+          HTTPS 证书到期时通知
+          <small>提前天数在设置中统一配置</small>
+        </label>
       </NCard>
 
       <div class="footer-row">
@@ -213,6 +239,9 @@ function endpointSaved(endpoint: DockerEndpoint) {
 .docker-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem; }
 .candidate-select, .docker-note { grid-column: span 3; }
 .docker-note { color: var(--sc-muted); }
+.cert-toggle { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; color: var(--sc-muted); }
+.cert-toggle small { margin-left: 0.2rem; color: var(--sc-subtle); }
+.cert-toggle.disabled { opacity: 0.55; }
 .footer-row { display: flex; align-items: center; justify-content: space-between; margin-top: 1rem; }
 @media (max-width: 620px) { .form-grid, .monitor-row { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
 </style>

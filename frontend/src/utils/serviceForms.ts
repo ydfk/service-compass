@@ -15,6 +15,7 @@ export function emptyService(): ServiceInput {
     enabled: true,
     sort_order: 0,
     create_monitor: true,
+    cert_expiry_notify: false,
     monitor_type: 'http',
     monitor_target_url_mode: 'public',
   }
@@ -47,6 +48,12 @@ export function emptyHttpMonitor(): MonitorInput {
     cert_warning_days: 30,
     cert_critical_days: 7,
     enabled: true,
+    notify_enabled: false,
+    notification_channel_ids: [],
+    notify_on_down: true,
+    notify_on_recovery: true,
+    notify_on_warning: true,
+    notification_cooldown_sec: 300,
   }
 }
 
@@ -77,10 +84,20 @@ export function monitorToInput(monitor: Monitor): MonitorInput {
     cert_warning_days: monitor.cert_warning_days,
     cert_critical_days: monitor.cert_critical_days,
     enabled: monitor.enabled,
+    notify_enabled: monitor.notify_enabled,
+    notification_channel_ids: monitor.notification_channel_ids,
+    notify_on_down: monitor.notify_on_down,
+    notify_on_recovery: monitor.notify_on_recovery,
+    notify_on_warning: monitor.notify_on_warning,
+    notification_cooldown_sec: monitor.notification_cooldown_sec,
   }
 }
 
-export function serviceToInput(service: Service, monitor?: Monitor): ServiceInput {
+export function serviceToInput(
+  service: Service,
+  monitor?: Monitor,
+  certMonitor?: Monitor,
+): ServiceInput {
   return {
     group_id: service.group_id === UNGROUPED_ID ? '' : service.group_id,
     name: service.name,
@@ -99,6 +116,7 @@ export function serviceToInput(service: Service, monitor?: Monitor): ServiceInpu
     docker_compose_project: service.docker_compose_project,
     docker_compose_service: service.docker_compose_service,
     create_monitor: Boolean(monitor?.enabled),
+    cert_expiry_notify: Boolean(certMonitor?.enabled),
     monitor_type: 'http',
     monitor_target_url_mode: monitor?.target_url_mode === 'local' ? 'local' : 'public',
   }
@@ -108,4 +126,8 @@ export function serviceHttpMonitor(monitors: Monitor[], serviceId: string) {
   return monitors.find(
     (item) => item.service_id === serviceId && ['http', 'http_keyword'].includes(item.monitor_type),
   )
+}
+
+export function serviceCertMonitor(monitors: Monitor[], serviceId: string) {
+  return monitors.find((item) => item.service_id === serviceId && item.monitor_type === 'cert')
 }

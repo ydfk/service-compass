@@ -26,6 +26,7 @@ import {
   emptyHttpMonitor,
   emptyService,
   monitorToInput,
+  serviceCertMonitor,
   serviceHttpMonitor,
   serviceToInput,
   UNGROUPED_ID,
@@ -82,7 +83,8 @@ async function openEditor(service: Service) {
   editingService.value = service
   editorTitle.value = '编辑服务'
   const monitor = serviceHttpMonitor(editorMonitors.value, service.id)
-  serviceForm.value = serviceToInput(service, monitor)
+  const certMonitor = serviceCertMonitor(editorMonitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor, certMonitor)
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
   editorShow.value = true
 }
@@ -103,7 +105,8 @@ async function openClone(service: Service) {
   editingService.value = null
   editorTitle.value = `克隆 ${service.name}`
   const monitor = serviceHttpMonitor(editorMonitors.value, service.id)
-  serviceForm.value = serviceToInput(service, monitor)
+  const certMonitor = serviceCertMonitor(editorMonitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor, certMonitor)
   serviceForm.value.name = `${service.name} 副本`
   serviceForm.value.sort_order = service.sort_order + 1
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
@@ -217,6 +220,7 @@ onMounted(async () => {
       @group-created="addEditorGroup"
       @save="saveService"
     />
+    <footer class="public-footer">ServiceCompass · v0.1.0 · © 2026</footer>
   </div>
 </template>
 
@@ -228,6 +232,7 @@ onMounted(async () => {
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
 .header-actions a { text-decoration: none; }
 main { padding-top: 0.4rem; }
+.public-footer { margin-top: 3rem; color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; text-align: center; }
 .group-wrapper.draggable { cursor: grab; }
 .group-wrapper.draggable :deep(.group-section > header) { padding-left: 0.6rem; border-left: 2px solid rgb(96 165 250 / 45%); }
 .group-wrapper.dragging { opacity: 0.45; }

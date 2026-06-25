@@ -1,43 +1,54 @@
 <script setup lang="ts">
-import { Activity, Edit, History, PlayerPlay, Plus, Trash } from '@vicons/tabler'
+import { Bell, History, PlayerPlay } from '@vicons/tabler'
 import {
   NButton,
   NCard,
   NDataTable,
   NDrawer,
   NDrawerContent,
+  NForm,
+  NFormItem,
   NIcon,
+  NInputNumber,
   NModal,
   NSelect,
   NSpace,
   NStatistic,
-  useDialog,
+  NSwitch,
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
 import { computed, h, onMounted, ref } from 'vue'
 import { groupsApi } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
+import { notificationsApi } from '../api/notifications'
 import { servicesApi } from '../api/services'
-import MonitorForm from '../components/MonitorForm.vue'
 import StatusBadge from '../components/StatusBadge.vue'
-import type { Group, Monitor, MonitorCheck, MonitorInput, Service } from '../types'
-import { UNGROUPED_ID } from '../utils/serviceForms'
+import type {
+  Group,
+  Monitor,
+  MonitorCheck,
+  MonitorInput,
+  NotificationChannel,
+  Service,
+  Status,
+} from '../types'
+import { monitorToInput, UNGROUPED_ID } from '../utils/serviceForms'
 
 const monitors = ref<Monitor[]>([])
 const services = ref<Service[]>([])
 const groups = ref<Group[]>([])
+const channels = ref<NotificationChannel[]>([])
 const checks = ref<MonitorCheck[]>([])
-const editing = ref<Monitor | null>(null)
 const selectedMonitor = ref<Monitor | null>(null)
-const form = ref<MonitorInput>(emptyMonitor())
-const modal = ref(false)
+const notificationMonitor = ref<Monitor | null>(null)
+const notificationForm = ref<MonitorInput>(emptyMonitor())
 const historyDrawer = ref(false)
+const notificationModal = ref(false)
 const loading = ref(false)
 const selectedGroupId = ref('')
 const selectedServiceId = ref('')
 const message = useMessage()
-const dialog = useDialog()
 
 const serviceById = computed(() => new Map(services.value.map((item) => [item.id, item])))
 const groupById = computed(() => new Map(groups.value.map((item) => [item.id, item])))
@@ -55,6 +66,9 @@ const serviceOptions = computed(() => {
     ...filtered.map((item) => ({ label: item.name, value: item.id })),
   ]
 })
+const channelOptions = computed(() =>
+  channels.value.map((item) => ({ label: item.name, value: item.id })),
+)
 const filteredMonitors = computed(() =>
   monitors.value.filter((monitor) => {
     if (selectedServiceId.value) return monitor.service_id === selectedServiceId.value
@@ -86,17 +100,16 @@ const columns: DataTableColumns<Monitor> = [
       row.monitor_type === 'http_keyword' ? 'HTTP 关键字' : row.monitor_type.toUpperCase(),
   },
   {
-    title: '目标',
-    key: 'target_url',
-    ellipsis: { tooltip: true },
-    render: (row) => monitorTarget(row),
+    title: '状态条',
+    key: 'recent_statuses',
+    render: (row) => hStatusStrip(row.recent_statuses),
   },
   {
-    title: '延迟',
-    key: 'last_latency_ms',
-    render: (row) => (row.last_latency_ms == null ? '—' : `${row.last_latency_ms} ms`),
+    title: '最近日志',
+    key: 'recent_checks',
+    ellipsis: { tooltip: true },
+    render: (row) => recentLog(row),
   },
-  { title: '证书', key: 'cert', render: (row) => certificateDays(row) },
   {
     title: '上次检查',
     key: 'last_checked_at',
@@ -111,8 +124,7 @@ const columns: DataTableColumns<Monitor> = [
         default: () => [
           button(PlayerPlay, '测试', () => test(row)),
           button(History, '日志', () => showHistory(row)),
-          button(Edit, '编辑', () => open(row)),
-          button(Trash, '删除', () => remove(row)),
+          button(Bell, row.notify_enabled ? '通知已开' : '通知', () => openNotification(row)),
         ],
       }),
   },
@@ -136,7 +148,7 @@ const checkColumns: DataTableColumns<MonitorCheck> = [
   },
 ]
 
-function button(icon: typeof Edit, label: string, onClick: () => void) {
+function button(icon: typeof Bell, label: string, onClick: () => void) {
   return h(
     NButton,
     { size: 'small', quaternary: true, onClick },
@@ -144,31 +156,31 @@ function button(icon: typeof Edit, label: string, onClick: () => void) {
   )
 }
 
+function hStatusStrip(statuses: Status[]) {
+  const values = statuses.length ? statuses : ['unknown']
+  return h(
+    'div',
+    { class: 'status-strip', title: '最近 30 次检查' },
+    values.map((status, index) => h('i', { key: index, class: status })),
+  )
+}
+
+function recentLog(monitor: Monitor) {
+  if (!monitor.recent_checks.length) return '等待首次检查'
+  return monitor.recent_checks
+    .slice(0, 3)
+    .map(
+      (item) =>
+        `${new Date(item.checked_at).toLocaleTimeString()} ${item.status}${item.error_message ? ` · ${item.error_message}` : ''}`,
+    )
+    .join(' / ')
+}
+
 function serviceScope(monitor: Monitor) {
   const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
   if (!service) return '未关联服务'
   const group = groupById.value.get(service.group_id)
   return `${service.name} / ${group?.name || '未分组'}`
-}
-
-function monitorTarget(monitor: Monitor) {
-  if (monitor.monitor_type === 'docker') return serviceScope(monitor)
-  return monitor.domain || monitor.target_url || `${monitor.target_url_mode} 地址`
-}
-
-function certificateDays(monitor: Monitor) {
-  if (monitor.monitor_type !== 'cert' || !monitor.last_extra_json) return '—'
-  try {
-    const extra = JSON.parse(monitor.last_extra_json) as {
-      days_left?: number
-      warning_days?: number
-    }
-    return extra.days_left == null
-      ? '—'
-      : `${extra.days_left} 天 / 提前 ${extra.warning_days ?? 30} 天提醒`
-  } catch {
-    return '—'
-  }
 }
 
 function briefExtra(check: MonitorCheck) {
@@ -210,70 +222,27 @@ function emptyMonitor(): MonitorInput {
     cert_warning_days: 30,
     cert_critical_days: 0,
     enabled: true,
+    notify_enabled: false,
+    notification_channel_ids: [],
+    notify_on_down: true,
+    notify_on_recovery: true,
+    notify_on_warning: true,
+    notification_cooldown_sec: 300,
   }
 }
 
 async function load() {
   loading.value = true
   try {
-    ;[monitors.value, services.value, groups.value] = await Promise.all([
+    ;[monitors.value, services.value, groups.value, channels.value] = await Promise.all([
       monitorsApi.list(),
       servicesApi.list(),
       groupsApi.list(),
+      notificationsApi.channels(),
     ])
   } finally {
     loading.value = false
   }
-}
-
-function open(monitor?: Monitor) {
-  editing.value = monitor ?? null
-  form.value = monitor
-    ? {
-        service_id: monitor.service_id,
-        name: monitor.name,
-        monitor_type: monitor.monitor_type,
-        target_url: monitor.target_url,
-        target_url_mode: monitor.target_url_mode,
-        method: monitor.method,
-        expected_status_min: monitor.expected_status_min,
-        expected_status_max: monitor.expected_status_max,
-        keyword: monitor.keyword,
-        interval_sec: monitor.interval_sec,
-        timeout_sec: monitor.timeout_sec,
-        retries: monitor.retries,
-        retry_interval_sec: monitor.retry_interval_sec,
-        follow_redirects: monitor.follow_redirects,
-        tls_verify: monitor.tls_verify,
-        auth_type: monitor.auth_type,
-        auth_username: monitor.auth_username,
-        auth_password: '',
-        domain: monitor.domain,
-        record_type: monitor.record_type,
-        expected_value: monitor.expected_value,
-        cert_port: monitor.cert_port,
-        cert_warning_days: monitor.cert_warning_days,
-        cert_critical_days: monitor.cert_critical_days,
-        enabled: monitor.enabled,
-      }
-    : emptyMonitor()
-  modal.value = true
-}
-
-async function save() {
-  const http = ['http', 'http_keyword'].includes(form.value.monitor_type)
-  if (
-    !form.value.name ||
-    (http && form.value.target_url_mode === 'custom' && !form.value.target_url)
-  )
-    return message.warning('请填写监控名称与目标 URL')
-  if (['dns', 'cert'].includes(form.value.monitor_type) && !form.value.domain)
-    return message.warning('请填写域名')
-  if (editing.value) await monitorsApi.update(editing.value.id, form.value)
-  else await monitorsApi.create(form.value)
-  modal.value = false
-  message.success('监控已保存，调度器将自动执行')
-  await load()
 }
 
 async function test(monitor: Monitor) {
@@ -291,17 +260,25 @@ async function showHistory(monitor: Monitor) {
   historyDrawer.value = true
 }
 
-function remove(monitor: Monitor) {
-  dialog.warning({
-    title: '删除监控',
-    content: `确认删除 ${monitor.name} 及其历史记录？`,
-    positiveText: '删除',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await monitorsApi.remove(monitor.id)
-      await load()
-    },
-  })
+function openNotification(monitor: Monitor) {
+  notificationMonitor.value = monitor
+  notificationForm.value = monitorToInput(monitor)
+  notificationModal.value = true
+}
+
+async function saveNotification() {
+  const monitor = notificationMonitor.value
+  if (!monitor) return
+  if (
+    notificationForm.value.notify_enabled &&
+    !notificationForm.value.notification_channel_ids.length
+  ) {
+    return message.warning('请选择至少一个通知通道')
+  }
+  await monitorsApi.update(monitor.id, notificationForm.value)
+  notificationModal.value = false
+  message.success('监控通知设置已保存')
+  await load()
 }
 
 onMounted(load)
@@ -310,14 +287,10 @@ onMounted(load)
 <template>
   <header class="page-header">
     <div>
-      <p>MONITOR BEARINGS</p>
-      <h1>监控</h1>
-      <span>按分组和服务查看 HTTP、Docker、DNS 与证书检查日志。</span>
+      <p>MONITOR LOGBOOK</p>
+      <h1>监控日志</h1>
+      <span>按分组和服务查看所有监控的状态条、最近日志与通知设置。</span>
     </div>
-    <NButton type="primary" @click="open()">
-      <template #icon><NIcon :component="Plus" /></template>
-      新建监控
-    </NButton>
   </header>
 
   <div class="stat-grid">
@@ -346,12 +319,32 @@ onMounted(load)
     :row-key="(row: Monitor) => row.id"
   />
 
-  <NModal v-model:show="modal" preset="card" :title="editing ? '编辑监控' : '新建监控'" class="monitor-modal">
-    <MonitorForm v-model="form" :services="services" />
-    <NButton type="primary" block @click="save">
-      <template #icon><NIcon :component="Activity" /></template>
-      保存监控
-    </NButton>
+  <NModal v-model:show="notificationModal" preset="card" title="监控通知设置" class="notify-monitor-modal">
+    <NForm label-placement="top">
+      <div class="switches">
+        <label><NSwitch v-model:value="notificationForm.notify_enabled" /> 状态变化时通知</label>
+      </div>
+      <template v-if="notificationForm.notify_enabled">
+        <NFormItem label="通知通道">
+          <NSelect
+            v-model:value="notificationForm.notification_channel_ids"
+            :options="channelOptions"
+            multiple
+            filterable
+            placeholder="选择通知通道"
+          />
+        </NFormItem>
+        <div class="form-grid">
+          <NFormItem label="离线通知"><NSwitch v-model:value="notificationForm.notify_on_down" /></NFormItem>
+          <NFormItem label="恢复通知"><NSwitch v-model:value="notificationForm.notify_on_recovery" /></NFormItem>
+          <NFormItem label="警告通知"><NSwitch v-model:value="notificationForm.notify_on_warning" /></NFormItem>
+          <NFormItem label="冷却时间（秒）">
+            <NInputNumber v-model:value="notificationForm.notification_cooldown_sec" :min="0" />
+          </NFormItem>
+        </div>
+      </template>
+      <NButton type="primary" block @click="saveNotification">保存通知设置</NButton>
+    </NForm>
   </NModal>
 
   <NDrawer v-model:show="historyDrawer" :width="820">
@@ -395,8 +388,44 @@ onMounted(load)
 .filter-select {
   width: 14rem;
 }
-.monitor-modal {
-  width: min(52rem, calc(100vw - 2rem));
+.status-strip {
+  display: flex;
+  width: min(12rem, 100%);
+  height: 0.55rem;
+  gap: 2px;
+}
+.status-strip i {
+  min-width: 2px;
+  flex: 1;
+  border-radius: 1px;
+  background: #334155;
+}
+.status-strip i.up {
+  background: #34d399;
+}
+.status-strip i.down {
+  background: #fb7185;
+}
+.status-strip i.warning {
+  background: #fbbf24;
+}
+.notify-monitor-modal {
+  width: min(36rem, calc(100vw - 2rem));
+}
+.switches {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.switches label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 1rem;
 }
 @media (max-width: 760px) {
   .page-header {
@@ -405,6 +434,9 @@ onMounted(load)
   }
   .filter-select {
     width: min(100%, 18rem);
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

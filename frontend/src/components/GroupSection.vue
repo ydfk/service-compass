@@ -22,7 +22,13 @@ const emit = defineEmits<{
 <template>
   <section class="group-section">
     <header>
-      <h2>{{ group.name }} <small>{{ group.services.filter((item) => item.status === 'up').length }} 在线 / {{ group.services.length }} 服务</small></h2>
+      <h2>
+        {{ group.name }}
+        <small>{{ group.services.filter((item) => item.status === 'up').length }} 在线 / {{ group.services.length }} 服务</small>
+        <NButton v-if="editable && !sorting" quaternary circle size="tiny" title="添加服务" @click="emit('add', group)">
+          <NIcon :component="Plus" />
+        </NButton>
+      </h2>
     </header>
     <div class="service-grid" :class="cardMode">
       <ServiceCard
@@ -39,10 +45,6 @@ const emit = defineEmits<{
         @clone="emit('clone', $event)"
         @move="(item, direction) => emit('move', group, item, direction)"
       />
-      <button v-if="editable && !sorting" class="add-service" type="button" @click="emit('add', group)">
-        <NIcon :component="Plus" />
-        <span>添加服务</span>
-      </button>
     </div>
   </section>
 </template>
@@ -50,12 +52,10 @@ const emit = defineEmits<{
 <style scoped>
 .group-section { margin-top: 1.8rem; }
 header { margin-bottom: 0.8rem; }
-h2 { margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
+h2 { display: flex; align-items: center; gap: 0.45rem; margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
 h2 small { margin-left: 0.55rem; color: var(--sc-muted); font-size: 0.72rem; font-weight: 400; letter-spacing: 0; }
 .service-grid { display: grid; gap: 0.7rem; }
 .service-grid.compact { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
 .service-grid.detail { grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); }
-.add-service { display: flex; min-height: 3.8rem; align-items: center; justify-content: center; gap: 0.45rem; border: 1px dashed rgb(96 165 250 / 30%); border-radius: 0.8rem; background: transparent; color: var(--sc-muted); cursor: pointer; transition: 160ms ease; }
-.add-service:hover { border-color: rgb(96 165 250 / 65%); background: rgb(30 64 175 / 8%); color: var(--sc-accent); }
-@media (max-width: 520px) { h2 small { display: block; margin: 0.25rem 0 0; } }
+@media (max-width: 520px) { h2 { flex-wrap: wrap; } h2 small { margin: 0.25rem 0 0; } }
 </style>

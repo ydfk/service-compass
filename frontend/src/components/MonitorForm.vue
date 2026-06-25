@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { NAlert, NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui'
 import { computed } from 'vue'
-import type { MonitorInput, Service } from '../types'
+import type { MonitorInput, NotificationChannel, Service } from '../types'
 
 const props = withDefaults(
   defineProps<{
     services: Service[]
+    notificationChannels?: NotificationChannel[]
     showIdentity?: boolean
+    showNotification?: boolean
     allowedTypes?: MonitorInput['monitor_type'][]
   }>(),
-  { showIdentity: true, allowedTypes: () => ['http', 'http_keyword', 'dns', 'cert', 'docker'] },
+  {
+    notificationChannels: () => [],
+    showIdentity: true,
+    showNotification: false,
+    allowedTypes: () => ['http', 'http_keyword', 'dns', 'cert', 'docker'],
+  },
 )
 const model = defineModel<MonitorInput>({ required: true })
 const serviceOptions = computed(() => [
@@ -24,6 +31,9 @@ const typeOptions = computed(() =>
     { label: 'HTTPS 证书', value: 'cert' as const },
     { label: 'Docker 容器状态', value: 'docker' as const },
   ].filter((item) => props.allowedTypes.includes(item.value)),
+)
+const channelOptions = computed(() =>
+  props.notificationChannels.map((item) => ({ label: item.name, value: item.id })),
 )
 const ignoreTlsErrors = computed({
   get: () => !model.value.tls_verify,
@@ -140,6 +150,30 @@ const ignoreTlsErrors = computed({
       </template>
       <label><NSwitch v-model:value="model.enabled" /> 启用监控</label>
     </div>
+    <div v-if="showNotification" class="notify-box">
+      <div class="switches">
+        <label><NSwitch v-model:value="model.notify_enabled" /> 状态变化时通知</label>
+      </div>
+      <template v-if="model.notify_enabled">
+        <NFormItem label="通知通道">
+          <NSelect
+            v-model:value="model.notification_channel_ids"
+            :options="channelOptions"
+            multiple
+            filterable
+            placeholder="选择一个或多个通知通道"
+          />
+        </NFormItem>
+        <div class="form-grid three">
+          <NFormItem label="离线通知"><NSwitch v-model:value="model.notify_on_down" /></NFormItem>
+          <NFormItem label="恢复通知"><NSwitch v-model:value="model.notify_on_recovery" /></NFormItem>
+          <NFormItem label="警告通知"><NSwitch v-model:value="model.notify_on_warning" /></NFormItem>
+          <NFormItem label="通知冷却（秒）">
+            <NInputNumber v-model:value="model.notification_cooldown_sec" :min="0" />
+          </NFormItem>
+        </div>
+      </template>
+    </div>
   </NForm>
 </template>
 
@@ -166,6 +200,11 @@ const ignoreTlsErrors = computed({
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.notify-box {
+  padding-top: 0.6rem;
+  border-top: 1px solid rgb(148 163 184 / 12%);
 }
 
 @media (max-width: 680px) {

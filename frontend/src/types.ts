@@ -68,6 +68,7 @@ export interface ServiceInput {
   docker_compose_project?: string | null
   docker_compose_service?: string | null
   create_monitor: boolean
+  cert_expiry_notify: boolean
   monitor_type?: 'http'
   monitor_target_url_mode?: 'local' | 'public'
   monitor?: MonitorInput | null
@@ -106,6 +107,14 @@ export interface Monitor {
   last_latency_ms?: number | null
   last_error?: string | null
   last_extra_json?: string | null
+  recent_statuses: Status[]
+  recent_checks: MonitorCheck[]
+  notify_enabled: boolean
+  notification_channel_ids: string[]
+  notify_on_down: boolean
+  notify_on_recovery: boolean
+  notify_on_warning: boolean
+  notification_cooldown_sec: number
 }
 
 export type MonitorInput = Omit<
