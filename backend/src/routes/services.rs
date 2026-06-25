@@ -239,7 +239,7 @@ fn cert_monitor_input(input: &ServiceInput, monitor: &MonitorInput) -> Option<Mo
     cert.monitor_type = "cert".into();
     cert.domain = Some(domain);
     cert.cert_port = i64::from(parsed.port_or_known_default().unwrap_or(443));
-    cert.notify_on_down = false;
+    cert.notify_on_down = true;
     cert.notify_on_warning = true;
     cert.notify_on_recovery = true;
     Some(cert)

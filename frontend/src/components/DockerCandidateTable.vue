@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NDataTable, NTag, type DataTableColumns } from 'naive-ui'
-import { h } from 'vue'
+import { NDataTable, NTag, type DataTableColumns, type PaginationProps } from 'naive-ui'
+import { h, reactive } from 'vue'
 import type { DockerCandidate } from '../types'
 
 defineProps<{ candidates: DockerCandidate[]; loading?: boolean }>()
@@ -23,6 +23,11 @@ const columns: DataTableColumns<DockerCandidate> = [
   { title: '端口', key: 'ports', render: (row) => row.ports.join(', ') || '—' },
   { title: '建议地址', key: 'local_url', ellipsis: { tooltip: true } },
 ]
+const pagination = reactive<PaginationProps>({
+  pageSize: 20,
+  pageSizes: [20, 50, 100],
+  showSizePicker: true,
+})
 </script>
 
 <template>
@@ -32,5 +37,6 @@ const columns: DataTableColumns<DockerCandidate> = [
     :loading="loading"
     size="small"
     :row-key="(row: DockerCandidate) => `${row.endpoint_id}:${row.container_id}`"
+    :pagination="pagination"
   />
 </template>

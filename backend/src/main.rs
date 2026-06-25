@@ -7,13 +7,14 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let config = Arc::new(Config::from_env()?);
+    service_compass_backend::logs::init(&config.log_dir, config.log_retention_days)?;
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .with_ansi(false)
         .with_writer(service_compass_backend::logs::LogWriterFactory)
         .init();
 
-    let config = Arc::new(Config::from_env()?);
     let pool = db::connect(&config.database_url).await?;
     let state = AppState::new(pool, Arc::clone(&config))?;
     service_compass_backend::monitor::scheduler::start(state.clone());

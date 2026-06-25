@@ -90,6 +90,7 @@ watch(show, async (value) => {
     dockerApi.endpoints(),
     notificationsApi.channels(),
   ])
+  applyDefaultNotification()
 })
 
 watch(canNotifyCertificate, (value) => {
@@ -174,6 +175,16 @@ function endpointSaved(endpoint: DockerEndpoint) {
   if (index >= 0) endpoints.value[index] = endpoint
   else endpoints.value.push(endpoint)
   form.value.docker_endpoint_id = endpoint.id
+}
+
+function applyDefaultNotification() {
+  monitor.value.notify_on_down = true
+  monitor.value.notify_on_recovery = true
+  monitor.value.notify_on_warning = true
+  if (props.editing || notificationChannels.value.length !== 1 || monitor.value.notify_enabled)
+    return
+  monitor.value.notify_enabled = true
+  monitor.value.notification_channel_ids = [notificationChannels.value[0].id]
 }
 </script>
 

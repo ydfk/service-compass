@@ -19,6 +19,9 @@ pub struct MonitorRow {
     pub retry_interval_sec: i64,
     pub follow_redirects: bool,
     pub tls_verify: bool,
+    pub request_body_type: String,
+    pub request_body_secret: Option<String>,
+    pub request_headers_secret: Option<String>,
     pub auth_type: String,
     pub auth_username: Option<String>,
     pub auth_password_secret: Option<String>,
@@ -51,6 +54,9 @@ pub struct MonitorView {
     pub retry_interval_sec: i64,
     pub follow_redirects: bool,
     pub tls_verify: bool,
+    pub request_body_type: String,
+    pub has_request_body: bool,
+    pub has_request_headers: bool,
     pub auth_type: String,
     pub auth_username: Option<String>,
     pub has_auth_password: bool,
@@ -95,6 +101,9 @@ impl MonitorView {
             retry_interval_sec: row.retry_interval_sec,
             follow_redirects: row.follow_redirects,
             tls_verify: row.tls_verify,
+            request_body_type: row.request_body_type,
+            has_request_body: row.request_body_secret.is_some(),
+            has_request_headers: row.request_headers_secret.is_some(),
             auth_type: row.auth_type,
             auth_username: row.auth_username,
             has_auth_password: row.auth_password_secret.is_some(),
@@ -149,6 +158,10 @@ pub struct MonitorInput {
     pub follow_redirects: bool,
     #[serde(default = "default_true")]
     pub tls_verify: bool,
+    #[serde(default = "default_body_type")]
+    pub request_body_type: String,
+    pub request_body: Option<String>,
+    pub request_headers: Option<String>,
     #[serde(default = "default_auth_type")]
     pub auth_type: String,
     pub auth_username: Option<String>,
@@ -202,6 +215,9 @@ impl MonitorInput {
             retry_interval_sec: default_retry_interval(),
             follow_redirects: true,
             tls_verify: true,
+            request_body_type: default_body_type(),
+            request_body: None,
+            request_headers: None,
             auth_type: default_auth_type(),
             auth_username: None,
             auth_password: None,
@@ -251,6 +267,9 @@ const fn default_retry_interval() -> i64 {
 }
 fn default_auth_type() -> String {
     "none".into()
+}
+fn default_body_type() -> String {
+    "json".into()
 }
 fn default_record_type() -> String {
     "A".into()

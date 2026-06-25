@@ -11,6 +11,7 @@ use crate::{
 struct SettingsInput {
     retention_days: i64,
     cert_expiry_warning_days: i64,
+    notification_cooldown_sec: i64,
 }
 
 pub fn router() -> Router<AppState> {
@@ -20,9 +21,11 @@ pub fn router() -> Router<AppState> {
 async fn get_settings(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
     let retention_days = setting_i64(&state, "retention_days", 30).await?;
     let cert_expiry_warning_days = setting_i64(&state, "cert_expiry_warning_days", 30).await?;
+    let notification_cooldown_sec = setting_i64(&state, "notification_cooldown_sec", 300).await?;
     Ok(Json(serde_json::json!({
         "retention_days": retention_days,
-        "cert_expiry_warning_days": cert_expiry_warning_days
+        "cert_expiry_warning_days": cert_expiry_warning_days,
+        "notification_cooldown_sec": notification_cooldown_sec
     })))
 }
 
@@ -40,6 +43,11 @@ async fn update_settings(
             "证书到期提醒天数必须在 1 到 365 之间".into(),
         ));
     }
+    if !(0..=86_400).contains(&input.notification_cooldown_sec) {
+        return Err(AppError::Validation(
+            "通知冷却时间必须在 0 到 86400 秒之间".into(),
+        ));
+    }
     save_setting(&state, "retention_days", input.retention_days).await?;
     save_setting(
         &state,
@@ -47,10 +55,30 @@ async fn update_settings(
         input.cert_expiry_warning_days,
     )
     .await?;
+    save_setting(
+        &state,
+        "notification_cooldown_sec",
+        input.notification_cooldown_sec,
+    )
+    .await?;
+    sync_existing_values(&state, &input).await?;
     Ok(Json(serde_json::json!({
         "retention_days": input.retention_days,
-        "cert_expiry_warning_days": input.cert_expiry_warning_days
+        "cert_expiry_warning_days": input.cert_expiry_warning_days,
+        "notification_cooldown_sec": input.notification_cooldown_sec
     })))
+}
+
+async fn sync_existing_values(state: &AppState, input: &SettingsInput) -> AppResult<()> {
+    sqlx::query("UPDATE monitors SET cert_warning_days = ? WHERE monitor_type = 'cert'")
+        .bind(input.cert_expiry_warning_days)
+        .execute(&state.pool)
+        .await?;
+    sqlx::query("UPDATE notification_rules SET cooldown_sec = ?")
+        .bind(input.notification_cooldown_sec)
+        .execute(&state.pool)
+        .await?;
+    Ok(())
 }
 
 async fn setting_i64(state: &AppState, key: &str, fallback: i64) -> AppResult<i64> {

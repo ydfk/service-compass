@@ -14,6 +14,8 @@ async fn test_state() -> AppState {
         secret_key: Some("test-secret".into()),
         secret_file: Path::new("target/test-secret.key").into(),
         static_dir: Path::new("missing").into(),
+        log_dir: Path::new("target/test-logs").into(),
+        log_retention_days: 30,
         production: false,
     });
     AppState::new(db::test_pool().await, config).unwrap()

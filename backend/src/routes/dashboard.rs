@@ -101,7 +101,7 @@ async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::
     let monitors: Vec<MonitorSummary> = sqlx::query_as(
         "SELECT m.id, m.service_id, m.monitor_type, s.current_status, s.last_checked_at, s.last_latency_ms, s.last_error \
          FROM monitor_states s JOIN monitors m ON m.id = s.monitor_id \
-         WHERE m.service_id IS NOT NULL AND m.enabled = 1",
+         WHERE m.service_id IS NOT NULL AND m.enabled = 1 AND m.monitor_type <> 'cert'",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -206,7 +206,7 @@ async fn summary(State(state): State<AppState>) -> AppResult<Json<serde_json::Va
     let monitors: Vec<(String, String, Option<i64>)> = sqlx::query_as(
         "SELECT m.service_id, s.current_status, s.last_latency_ms \
          FROM monitor_states s JOIN monitors m ON m.id = s.monitor_id \
-         WHERE m.service_id IS NOT NULL AND m.enabled = 1",
+         WHERE m.service_id IS NOT NULL AND m.enabled = 1 AND m.monitor_type <> 'cert'",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -273,7 +273,7 @@ async fn service_history(
     let cutoff = (Utc::now() - duration).to_rfc3339();
     let checks: Vec<(String, String, Option<i64>)> = sqlx::query_as(
         "SELECT c.checked_at, c.status, c.latency_ms FROM monitor_checks c \
-         JOIN monitors m ON m.id = c.monitor_id WHERE m.service_id = ? AND c.checked_at >= ? \
+         JOIN monitors m ON m.id = c.monitor_id WHERE m.service_id = ? AND m.monitor_type <> 'cert' AND c.checked_at >= ? \
          ORDER BY c.checked_at",
     )
     .bind(id)

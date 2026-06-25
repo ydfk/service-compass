@@ -14,8 +14,9 @@ import {
   useDialog,
   useMessage,
   type DataTableColumns,
+  type PaginationProps,
 } from 'naive-ui'
-import { h, onMounted, ref } from 'vue'
+import { h, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { groupsApi, type GroupInput } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
@@ -46,6 +47,11 @@ const httpMonitor = ref<MonitorInput>(emptyHttpMonitor())
 const message = useMessage()
 const dialog = useDialog()
 const route = useRoute()
+const tablePagination = reactive<PaginationProps>({
+  pageSize: 20,
+  pageSizes: [20, 50, 100],
+  showSizePicker: true,
+})
 
 const columns: DataTableColumns<Service> = [
   { title: '服务', key: 'name', render: (row) => h('strong', row.name) },
@@ -221,7 +227,13 @@ onMounted(async () => {
 <template>
   <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
   <section v-if="groups.length" class="group-strip"><div v-for="group in groups" :key="group.id" class="group-item" :class="{ dragging: draggingGroupId === group.id }" draggable="true" @dragstart="startGroupDrag(group)" @dragend="draggingGroupId = null" @dragover.prevent @drop.prevent="dropGroup(group)"><NCard size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务 · 可拖拽排序</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></div></section>
-  <NDataTable :columns="columns" :data="services" :loading="loading" :row-key="(row: Service) => row.id" />
+  <NDataTable
+    :columns="columns"
+    :data="services"
+    :loading="loading"
+    :row-key="(row: Service) => row.id"
+    :pagination="tablePagination"
+  />
   <NModal
     v-model:show="groupModal"
     preset="card"

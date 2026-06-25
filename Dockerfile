@@ -1,7 +1,7 @@
-FROM node:22-alpine AS frontend-builder
+FROM node:26-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN npm install -g @pnpm/exe@11.8.0 && pnpm install --frozen-lockfile
 COPY frontend ./
 RUN pnpm build
 

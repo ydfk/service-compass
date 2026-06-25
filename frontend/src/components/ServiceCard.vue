@@ -26,6 +26,12 @@ const activeUrl = computed(() => {
   return preferred || props.service.public_url || props.service.local_url
 })
 const iconUrl = computed(() => props.service.icon_url || props.service.icon_value || '')
+const subtitle = computed(
+  () =>
+    props.service.description ||
+    props.service.docker_image ||
+    (!activeUrl.value ? '未配置访问地址' : ''),
+)
 
 watch(iconUrl, () => {
   iconFailed.value = false
@@ -56,7 +62,7 @@ function trackPoints(track: MonitorTrack): StatusPoint[] {
     </div>
     <div class="identity">
       <h3>{{ service.name }}</h3>
-      <p v-if="cardMode === 'detail'">{{ service.description || service.docker_image || (activeUrl ? '服务状态' : '未配置访问地址') }}</p>
+      <p v-if="cardMode === 'detail' && subtitle">{{ subtitle }}</p>
     </div>
     <StatusBadge :status="service.status" />
 
@@ -92,7 +98,7 @@ function trackPoints(track: MonitorTrack): StatusPoint[] {
 .service-card.no-url::after { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, transparent, rgb(148 163 184 / 5%)); content: ""; pointer-events: none; }
 .service-card.sorting { cursor: move; border-style: dashed; }
 .service-card.detail { grid-template-columns: 3rem minmax(0, 1fr) auto; align-content: start; min-height: 11.5rem; padding: 1rem; }
-.service-icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 0.6rem; background: var(--sc-icon-bg); font-size: 1.2rem; }
+.service-icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border: 1px solid var(--sc-border); border-radius: 0.6rem; background: var(--sc-card); font-size: 1.2rem; }
 .detail .service-icon { width: 3rem; height: 3rem; }
 .service-icon img { width: 72%; height: 72%; object-fit: contain; }
 .identity { min-width: 0; }

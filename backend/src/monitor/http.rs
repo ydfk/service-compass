@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use reqwest::{Client, Method, redirect::Policy};
+use reqwest::{Client, Method, header::CONTENT_TYPE, redirect::Policy};
 
 use crate::{models::monitor::MonitorRow, monitor::CheckResult, state::AppState};
 
@@ -59,6 +59,21 @@ async fn check_once(state: &AppState, monitor: &MonitorRow) -> Result<CheckResul
             .unwrap_or_default();
         request = request.basic_auth(username, Some(password));
     }
+    if let Some(headers) = request_headers(state, monitor)? {
+        for (key, value) in headers {
+            request = request.header(key, value);
+        }
+    }
+    if monitor.method == "POST"
+        && let Some(body) = secret_text(state, monitor.request_body_secret.as_deref())?
+    {
+        request = request.body(body);
+        if monitor.request_body_type == "form" {
+            request = request.header(CONTENT_TYPE, "application/x-www-form-urlencoded");
+        } else {
+            request = request.header(CONTENT_TYPE, "application/json");
+        }
+    }
 
     let started = Instant::now();
     let response = request.send().await?;
@@ -87,6 +102,27 @@ async fn check_once(state: &AppState, monitor: &MonitorRow) -> Result<CheckResul
         error_message: None,
         extra_json: None,
     })
+}
+
+fn secret_text(state: &AppState, secret: Option<&str>) -> Result<Option<String>> {
+    secret.map(|value| state.secrets.decrypt(value)).transpose()
+}
+
+fn request_headers(
+    state: &AppState,
+    monitor: &MonitorRow,
+) -> Result<Option<Vec<(String, String)>>> {
+    let Some(headers) = secret_text(state, monitor.request_headers_secret.as_deref())? else {
+        return Ok(None);
+    };
+    let parsed = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&headers)
+        .context("请求头必须是 JSON 对象")?;
+    Ok(Some(
+        parsed
+            .into_iter()
+            .filter_map(|(key, value)| value.as_str().map(|value| (key, value.to_string())))
+            .collect(),
+    ))
 }
 
 async fn resolve_url(state: &AppState, monitor: &MonitorRow) -> Result<String> {

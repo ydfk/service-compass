@@ -18,6 +18,7 @@ import { useAuthStore } from '../stores/auth'
 
 const retentionDays = ref(30)
 const certExpiryWarningDays = ref(30)
+const notificationCooldownSec = ref(300)
 const credentials = reactive({ current_password: '', username: '', new_password: '' })
 const message = useMessage()
 const auth = useAuthStore()
@@ -26,6 +27,7 @@ async function save() {
   await settingsApi.update({
     retention_days: retentionDays.value,
     cert_expiry_warning_days: certExpiryWarningDays.value,
+    notification_cooldown_sec: notificationCooldownSec.value,
   })
   message.success('设置已保存')
 }
@@ -41,6 +43,7 @@ onMounted(async () => {
   const settings = await settingsApi.get()
   retentionDays.value = settings.retention_days
   certExpiryWarningDays.value = settings.cert_expiry_warning_days
+  notificationCooldownSec.value = settings.notification_cooldown_sec
   credentials.username = auth.username || (await api<{ username: string }>('/api/auth/me')).username
 })
 </script>
@@ -51,6 +54,7 @@ onMounted(async () => {
     <NCard title="监控历史">
       <NFormItem label="检查记录保留天数"><NInputNumber v-model:value="retentionDays" :min="1" :max="365" /></NFormItem>
       <NFormItem label="证书到期提醒提前天数"><NInputNumber v-model:value="certExpiryWarningDays" :min="1" :max="365" /></NFormItem>
+      <NFormItem label="通知冷却时间（秒）"><NInputNumber v-model:value="notificationCooldownSec" :min="0" :max="86400" /></NFormItem>
       <NButton type="primary" @click="save"><template #icon><NIcon :component="DeviceFloppy" /></template>保存设置</NButton>
     </NCard>
     <NCard title="管理员账号">

@@ -127,6 +127,31 @@ const ignoreTlsErrors = computed({
         <NSelect v-model:value="model.method" :options="['GET', 'HEAD', 'POST'].map((value) => ({ label: value, value }))" />
       </NFormItem>
     </div>
+    <template v-if="['http', 'http_keyword'].includes(model.monitor_type) && model.method === 'POST'">
+      <NFormItem label="请求体编码">
+        <NSelect
+          v-model:value="model.request_body_type"
+          :options="[
+            { label: 'JSON', value: 'json' },
+            { label: 'x-www-form-urlencoded', value: 'form' },
+          ]"
+        />
+      </NFormItem>
+      <NFormItem label="请求体">
+        <NInput
+          v-model:value="model.request_body"
+          type="textarea"
+          placeholder='例如：{"status":"ok"} 或 a=1&b=2'
+        />
+      </NFormItem>
+      <NFormItem label="请求头 JSON">
+        <NInput
+          v-model:value="model.request_headers"
+          type="textarea"
+          placeholder='例如：{"Authorization":"Bearer ..."}'
+        />
+      </NFormItem>
+    </template>
     <div v-if="['http', 'http_keyword'].includes(model.monitor_type)" class="form-grid">
       <NFormItem label="Basic Auth">
         <NSelect
@@ -164,14 +189,6 @@ const ignoreTlsErrors = computed({
             placeholder="选择一个或多个通知通道"
           />
         </NFormItem>
-        <div class="form-grid three">
-          <NFormItem label="离线通知"><NSwitch v-model:value="model.notify_on_down" /></NFormItem>
-          <NFormItem label="恢复通知"><NSwitch v-model:value="model.notify_on_recovery" /></NFormItem>
-          <NFormItem label="警告通知"><NSwitch v-model:value="model.notify_on_warning" /></NFormItem>
-          <NFormItem label="通知冷却（秒）">
-            <NInputNumber v-model:value="model.notification_cooldown_sec" :min="0" />
-          </NFormItem>
-        </div>
       </template>
     </div>
   </NForm>

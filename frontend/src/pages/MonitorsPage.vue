@@ -11,7 +11,6 @@ import {
   NForm,
   NFormItem,
   NIcon,
-  NInputNumber,
   NModal,
   NSelect,
   NSpace,
@@ -162,6 +161,11 @@ const checkColumns: DataTableColumns<MonitorCheck> = [
   },
 ]
 const checkPagination = reactive<PaginationProps>({
+  pageSize: 20,
+  pageSizes: [20, 50, 100],
+  showSizePicker: true,
+})
+const tablePagination = reactive<PaginationProps>({
   pageSize: 20,
   pageSizes: [20, 50, 100],
   showSizePicker: true,
@@ -358,6 +362,9 @@ async function saveNotification() {
   ) {
     return message.warning('请选择至少一个通知通道')
   }
+  notificationForm.value.notify_on_down = true
+  notificationForm.value.notify_on_recovery = true
+  notificationForm.value.notify_on_warning = true
   await monitorsApi.update(monitor.id, notificationForm.value)
   notificationModal.value = false
   message.success('监控通知设置已保存')
@@ -401,6 +408,7 @@ onMounted(load)
     :loading="loading"
     :row-key="(row: Monitor) => row.id"
     :row-class-name="monitorRowClass"
+    :pagination="tablePagination"
   />
 
   <NModal
@@ -424,14 +432,6 @@ onMounted(load)
             placeholder="选择通知通道"
           />
         </NFormItem>
-        <div class="form-grid">
-          <NFormItem label="离线通知"><NSwitch v-model:value="notificationForm.notify_on_down" /></NFormItem>
-          <NFormItem label="恢复通知"><NSwitch v-model:value="notificationForm.notify_on_recovery" /></NFormItem>
-          <NFormItem label="警告通知"><NSwitch v-model:value="notificationForm.notify_on_warning" /></NFormItem>
-          <NFormItem label="冷却时间（秒）">
-            <NInputNumber v-model:value="notificationForm.notification_cooldown_sec" :min="0" />
-          </NFormItem>
-        </div>
       </template>
       <NButton type="primary" block @click="saveNotification">保存通知设置</NButton>
     </NForm>
@@ -440,7 +440,6 @@ onMounted(load)
   <NDrawer
     v-model:show="historyDrawer"
     width="min(1280px, calc(100vw - 24px))"
-    :mask-closable="false"
   >
     <NDrawerContent
       :title="selectedMonitor ? `${selectedMonitor.name} · 检查日志` : '检查日志'"

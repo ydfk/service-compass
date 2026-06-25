@@ -100,6 +100,11 @@ export interface Monitor {
   retry_interval_sec: number
   follow_redirects: boolean
   tls_verify: boolean
+  request_body_type: 'json' | 'form'
+  has_request_body?: boolean
+  has_request_headers?: boolean
+  request_body?: string | null
+  request_headers?: string | null
   auth_type: 'none' | 'basic'
   auth_username?: string | null
   has_auth_password?: boolean
@@ -130,6 +135,8 @@ export type MonitorInput = Omit<
   Monitor,
   | 'id'
   | 'has_auth_password'
+  | 'has_request_body'
+  | 'has_request_headers'
   | 'current_status'
   | 'last_checked_at'
   | 'last_latency_ms'

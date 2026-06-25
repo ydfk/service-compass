@@ -196,14 +196,18 @@ async fn apply_notification_settings(state: &AppState, view: &mut MonitorView) -
 }
 
 async fn save(state: &AppState, id: &str, input: &MonitorInput, insert: bool) -> AppResult<bool> {
-    let existing_secret: Option<String> = if insert {
+    let mut input = input.clone();
+    apply_global_settings(state, &mut input).await?;
+    let existing_secrets: Option<(Option<String>, Option<String>, Option<String>)> = if insert {
         None
     } else {
-        sqlx::query_scalar("SELECT auth_password_secret FROM monitors WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&state.pool)
-            .await?
-            .flatten()
+        sqlx::query_as(
+            "SELECT auth_password_secret, request_body_secret, request_headers_secret \
+             FROM monitors WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await?
     };
     let password_secret = input
         .auth_password
@@ -212,18 +216,40 @@ async fn save(state: &AppState, id: &str, input: &MonitorInput, insert: bool) ->
         .map(|value| state.secrets.encrypt(value))
         .transpose()
         .map_err(AppError::Internal)?
-        .or(existing_secret);
+        .or_else(|| existing_secrets.as_ref().and_then(|item| item.0.clone()));
+    let request_body_secret = input
+        .request_body
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(|value| state.secrets.encrypt(value))
+        .transpose()
+        .map_err(AppError::Internal)?
+        .or_else(|| existing_secrets.as_ref().and_then(|item| item.1.clone()));
+    let request_headers_secret = input
+        .request_headers
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(|value| state.secrets.encrypt(value))
+        .transpose()
+        .map_err(AppError::Internal)?
+        .or_else(|| existing_secrets.as_ref().and_then(|item| item.2.clone()));
     let now = Utc::now().to_rfc3339();
     let sql = if insert {
-        "INSERT INTO monitors (id, service_id, name, monitor_type, target_url, target_url_mode, method, expected_status_min, expected_status_max, keyword, interval_sec, timeout_sec, retries, retry_interval_sec, follow_redirects, tls_verify, auth_type, auth_username, auth_password_secret, domain, record_type, expected_value, cert_port, cert_warning_days, cert_critical_days, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO monitors (id, service_id, name, monitor_type, target_url, target_url_mode, method, expected_status_min, expected_status_max, keyword, interval_sec, timeout_sec, retries, retry_interval_sec, follow_redirects, tls_verify, request_body_type, request_body_secret, request_headers_secret, auth_type, auth_username, auth_password_secret, domain, record_type, expected_value, cert_port, cert_warning_days, cert_critical_days, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     } else {
-        "UPDATE monitors SET service_id = ?, name = ?, monitor_type = ?, target_url = ?, target_url_mode = ?, method = ?, expected_status_min = ?, expected_status_max = ?, keyword = ?, interval_sec = ?, timeout_sec = ?, retries = ?, retry_interval_sec = ?, follow_redirects = ?, tls_verify = ?, auth_type = ?, auth_username = ?, auth_password_secret = ?, domain = ?, record_type = ?, expected_value = ?, cert_port = ?, cert_warning_days = ?, cert_critical_days = ?, enabled = ?, updated_at = ? WHERE id = ?"
+        "UPDATE monitors SET service_id = ?, name = ?, monitor_type = ?, target_url = ?, target_url_mode = ?, method = ?, expected_status_min = ?, expected_status_max = ?, keyword = ?, interval_sec = ?, timeout_sec = ?, retries = ?, retry_interval_sec = ?, follow_redirects = ?, tls_verify = ?, request_body_type = ?, request_body_secret = ?, request_headers_secret = ?, auth_type = ?, auth_username = ?, auth_password_secret = ?, domain = ?, record_type = ?, expected_value = ?, cert_port = ?, cert_warning_days = ?, cert_critical_days = ?, enabled = ?, updated_at = ? WHERE id = ?"
     };
     let mut query = sqlx::query(sql);
     if insert {
         query = query.bind(id);
     }
-    query = bind_input(query, input, password_secret);
+    query = bind_input(
+        query,
+        &input,
+        password_secret,
+        request_body_secret,
+        request_headers_secret,
+    );
     if insert {
         query = query.bind(&now).bind(&now);
     } else {
@@ -236,6 +262,8 @@ fn bind_input<'q>(
     query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
     input: &'q MonitorInput,
     password_secret: Option<String>,
+    request_body_secret: Option<String>,
+    request_headers_secret: Option<String>,
 ) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
     query
         .bind(&input.service_id)
@@ -253,6 +281,9 @@ fn bind_input<'q>(
         .bind(input.retry_interval_sec)
         .bind(input.follow_redirects)
         .bind(input.tls_verify)
+        .bind(&input.request_body_type)
+        .bind(request_body_secret)
+        .bind(request_headers_secret)
         .bind(&input.auth_type)
         .bind(&input.auth_username)
         .bind(password_secret)
@@ -263,6 +294,13 @@ fn bind_input<'q>(
         .bind(input.cert_warning_days)
         .bind(input.cert_critical_days)
         .bind(input.enabled)
+}
+
+async fn apply_global_settings(state: &AppState, input: &mut MonitorInput) -> AppResult<()> {
+    if input.monitor_type == "cert" {
+        input.cert_warning_days = setting_i64(state, "cert_expiry_warning_days", 30).await?;
+    }
+    Ok(())
 }
 
 fn validate(input: &MonitorInput) -> AppResult<()> {
@@ -280,6 +318,9 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
         return Err(AppError::Validation(
             "HTTP 请求方法只支持 GET、HEAD、POST".into(),
         ));
+    }
+    if is_http && !matches!(input.request_body_type.as_str(), "json" | "form") {
+        return Err(AppError::Validation("请求体编码必须是 json 或 form".into()));
     }
     if is_http
         && input.target_url_mode == "custom"
@@ -458,6 +499,7 @@ async fn sync_notification_rules(
         return Ok(());
     }
     let now = Utc::now().to_rfc3339();
+    let cooldown_sec = setting_i64(state, "notification_cooldown_sec", 300).await?;
     for channel_id in &input.notification_channel_ids {
         sqlx::query(
             "INSERT INTO notification_rules (id, monitor_id, channel_id, notify_on_down, notify_on_recovery, \
@@ -469,11 +511,21 @@ async fn sync_notification_rules(
         .bind(input.notify_on_down)
         .bind(input.notify_on_recovery)
         .bind(input.notify_on_warning)
-        .bind(input.notification_cooldown_sec)
+        .bind(cooldown_sec)
         .bind(&now)
         .bind(&now)
         .execute(&state.pool)
         .await?;
     }
     Ok(())
+}
+
+async fn setting_i64(state: &AppState, key: &str, fallback: i64) -> AppResult<i64> {
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(&state.pool)
+        .await?;
+    Ok(value
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(fallback))
 }
