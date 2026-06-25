@@ -48,12 +48,20 @@ const message = useMessage()
 const endpointOptions = computed(() =>
   endpoints.value.map((item) => ({ label: item.name, value: item.id })),
 )
-const candidateOptions = computed(() =>
-  candidates.value.map((item) => ({
+const candidateOptions = computed(() => {
+  const options = candidates.value.map((item) => ({
     label: `${item.suggested_name} · ${item.image || item.container_name}`,
     value: item.container_id,
-  })),
-)
+  }))
+  const current = form.value.docker_container_id
+  if (current && !options.some((item) => item.value === current)) {
+    options.unshift({
+      label: `${form.value.docker_name || '已关联容器'} · ${form.value.docker_image || current.slice(0, 12)}`,
+      value: current,
+    })
+  }
+  return options
+})
 const groupOptions = computed(() => [
   { label: '未分组', value: '' },
   ...localGroups.value.map((item) => ({ label: item.name, value: item.id })),
@@ -198,13 +206,13 @@ function endpointSaved(endpoint: DockerEndpoint) {
 <style scoped>
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.8rem; }
 .span-2 { grid-column: span 2; }
-.option-card { margin-top: 0.75rem; background: rgb(8 13 23 / 56%); }
+.option-card { margin-top: 0.75rem; background: var(--sc-card); }
 .option-title, .footer-row span { display: flex; align-items: center; gap: 0.45rem; }
 .select-with-action, .inline-create { display: flex; width: 100%; gap: 0.5rem; }
 .inline-create { margin-top: 0.5rem; }
 .docker-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem; }
 .candidate-select, .docker-note { grid-column: span 3; }
-.docker-note { color: #6f8098; }
+.docker-note { color: var(--sc-muted); }
 .footer-row { display: flex; align-items: center; justify-content: space-between; margin-top: 1rem; }
 @media (max-width: 620px) { .form-grid, .monitor-row { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
 </style>

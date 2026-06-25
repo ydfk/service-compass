@@ -25,6 +25,12 @@ const typeOptions = computed(() =>
     { label: 'Docker 容器状态', value: 'docker' as const },
   ].filter((item) => props.allowedTypes.includes(item.value)),
 )
+const ignoreTlsErrors = computed({
+  get: () => !model.value.tls_verify,
+  set: (value: boolean) => {
+    model.value.tls_verify = !value
+  },
+})
 </script>
 
 <template>
@@ -85,16 +91,11 @@ const typeOptions = computed(() =>
         <NInput v-model:value="model.expected_value" placeholder="不填写则只检查能否解析" />
       </NFormItem>
     </div>
-    <div v-if="model.monitor_type === 'cert'" class="form-grid three">
+    <div v-if="model.monitor_type === 'cert'" class="form-grid">
       <NFormItem label="HTTPS 端口">
         <NInputNumber v-model:value="model.cert_port" :min="1" :max="65535" />
       </NFormItem>
-      <NFormItem label="警告阈值（天）">
-        <NInputNumber v-model:value="model.cert_warning_days" :min="1" />
-      </NFormItem>
-      <NFormItem label="严重阈值（天）">
-        <NInputNumber v-model:value="model.cert_critical_days" :min="0" />
-      </NFormItem>
+      <NAlert type="info" :bordered="false">证书到期提醒提前天数在「设置」中统一配置。</NAlert>
     </div>
     <div class="form-grid three">
       <NFormItem label="检查间隔（秒）">
@@ -113,7 +114,7 @@ const typeOptions = computed(() =>
         <NInputNumber v-model:value="model.expected_status_max" :min="100" :max="599" />
       </NFormItem>
       <NFormItem v-if="['http', 'http_keyword'].includes(model.monitor_type)" label="请求方法">
-        <NSelect v-model:value="model.method" :options="['GET', 'HEAD'].map((value) => ({ label: value, value }))" />
+        <NSelect v-model:value="model.method" :options="['GET', 'HEAD', 'POST'].map((value) => ({ label: value, value }))" />
       </NFormItem>
     </div>
     <div v-if="['http', 'http_keyword'].includes(model.monitor_type)" class="form-grid">
@@ -135,8 +136,7 @@ const typeOptions = computed(() =>
     </div>
     <div class="switches">
       <template v-if="['http', 'http_keyword'].includes(model.monitor_type)">
-        <label><NSwitch v-model:value="model.follow_redirects" /> 跟随重定向</label>
-        <label><NSwitch v-model:value="model.tls_verify" /> 校验 TLS</label>
+        <label><NSwitch v-model:value="ignoreTlsErrors" /> 忽略 HTTPS TLS/SSL 错误</label>
       </template>
       <label><NSwitch v-model:value="model.enabled" /> 启用监控</label>
     </div>

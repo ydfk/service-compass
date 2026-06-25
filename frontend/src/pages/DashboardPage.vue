@@ -9,6 +9,7 @@ import { monitorsApi } from '../api/monitors'
 import { servicesApi } from '../api/services'
 import GroupSection from '../components/GroupSection.vue'
 import ServiceEditorModal from '../components/ServiceEditorModal.vue'
+import ThemeToggle from '../components/ThemeToggle.vue'
 import UrlSwitcher from '../components/UrlSwitcher.vue'
 import { useAuthStore } from '../stores/auth'
 import { useDashboardStore } from '../stores/dashboard'
@@ -169,6 +170,7 @@ onMounted(async () => {
       <RouterLink class="brand" to="/"><img src="../assets/logo.svg" alt="" /><span><strong>ServiceCompass</strong><small>{{ total }} 个服务 · {{ online }} 在线</small></span></RouterLink>
       <div class="header-actions">
         <UrlSwitcher :mode="mode" @change="setMode" />
+        <ThemeToggle />
         <NButtonGroup>
           <NButton size="small" :type="cardMode === 'compact' ? 'primary' : 'default'" title="小卡片" @click="setCardMode('compact')"><template #icon><NIcon :component="LayoutGrid" /></template>小卡</NButton>
           <NButton size="small" :type="cardMode === 'detail' ? 'primary' : 'default'" title="监控详情卡片" @click="setCardMode('detail')"><template #icon><NIcon :component="ListDetails" /></template>详情</NButton>
@@ -222,7 +224,7 @@ onMounted(async () => {
 .dashboard-shell { width: min(88rem, 100%); margin: auto; padding: 0 1.5rem 4rem; }
 .topbar { display: flex; min-height: 4.6rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgb(148 163 184 / 10%); }
 .brand { display: flex; flex: 0 0 auto; align-items: center; gap: 0.7rem; color: inherit; text-decoration: none; }
-.brand img { width: 2.2rem; }.brand span { display: grid; }.brand strong { font-family: "IBM Plex Mono", monospace; font-size: 0.86rem; }.brand small { color: #66768d; font-size: 0.66rem; }
+.brand img { width: 2.2rem; }.brand span { display: grid; }.brand strong { font-family: "IBM Plex Mono", monospace; font-size: 0.86rem; }.brand small { color: var(--sc-muted); font-size: 0.66rem; }
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
 .header-actions a { text-decoration: none; }
 main { padding-top: 0.4rem; }

@@ -82,28 +82,28 @@ function trackSegments(track: MonitorTrack): Status[] {
 </template>
 
 <style scoped>
-.service-card { position: relative; display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.7rem 0.8rem; border: 1px solid rgb(148 163 184 / 13%); border-radius: 0.8rem; background: rgb(14 22 37 / 86%); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
-.service-card:hover { border-color: rgb(96 165 250 / 42%); background: rgb(18 29 48 / 96%); transform: translateY(-1px); }
+.service-card { position: relative; display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.7rem 0.8rem; border: 1px solid var(--sc-border); border-radius: 0.8rem; background: var(--sc-card); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+.service-card:hover { border-color: rgb(96 165 250 / 42%); background: var(--sc-card-hover); transform: translateY(-1px); }
 .service-card.disabled { cursor: default; opacity: 0.68; }
 .service-card.sorting { cursor: move; border-style: dashed; }
 .service-card.detail { grid-template-columns: 3rem minmax(0, 1fr) auto; align-content: start; min-height: 11.5rem; padding: 1rem; }
-.service-icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 0.6rem; background: #090f1a; font-size: 1.2rem; }
+.service-icon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 0.6rem; background: var(--sc-icon-bg); font-size: 1.2rem; }
 .detail .service-icon { width: 3rem; height: 3rem; }
 .service-icon img { width: 72%; height: 72%; object-fit: contain; }
 .identity { min-width: 0; }
 h3 { margin: 0; overflow: hidden; font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; }
 .detail h3 { font-size: 1.05rem; }
-.identity p { margin: 0.28rem 0 0; overflow: hidden; color: #6f8098; font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+.identity p { margin: 0.28rem 0 0; overflow: hidden; color: var(--sc-muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-tracks { display: grid; grid-column: 1 / -1; gap: 0.75rem; margin-top: 0.45rem; }
 .track { display: grid; gap: 0.35rem; }
-.track-meta { display: flex; justify-content: space-between; gap: 1rem; color: #8291a7; font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; }
+.track-meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--sc-muted); font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; }
 .track-meta span { display: flex; align-items: center; gap: 0.35rem; }
 .track-meta i { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: #64748b; }
 .track-meta i.up { background: #34d399; }.track-meta i.down { background: #fb7185; }.track-meta i.warning { background: #fbbf24; }
 .status-strip { display: flex; height: 0.48rem; gap: 2px; }
 .status-strip i { min-width: 2px; flex: 1; border-radius: 1px; background: #334155; }
 .status-strip i.up { background: #34d399; }.status-strip i.down { background: #fb7185; }.status-strip i.warning { background: #fbbf24; }
-.no-monitor { padding: 0.65rem; border: 1px dashed rgb(148 163 184 / 15%); border-radius: 0.5rem; color: #617188; font-size: 0.72rem; text-align: center; }
-.card-tools { position: absolute; top: -0.45rem; right: -0.45rem; display: flex; border: 1px solid rgb(148 163 184 / 18%); border-radius: 999px; background: #10192a; }
+.no-monitor { padding: 0.65rem; border: 1px dashed rgb(148 163 184 / 15%); border-radius: 0.5rem; color: var(--sc-muted); font-size: 0.72rem; text-align: center; }
+.card-tools { position: absolute; top: -0.45rem; right: -0.45rem; display: flex; border: 1px solid rgb(148 163 184 / 18%); border-radius: 999px; background: var(--sc-surface); }
 @media (hover: hover) { .card-tools { opacity: 0; transition: opacity 160ms ease; } .service-card:hover .card-tools, .card-tools:focus-within { opacity: 1; } }
 </style>

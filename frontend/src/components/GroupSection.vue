@@ -51,12 +51,11 @@ const emit = defineEmits<{
 .group-section { margin-top: 1.8rem; }
 header { margin-bottom: 0.8rem; }
 h2 { margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
-h2 small { margin-left: 0.55rem; color: #65758c; font-size: 0.72rem; font-weight: 400; letter-spacing: 0; }
+h2 small { margin-left: 0.55rem; color: var(--sc-muted); font-size: 0.72rem; font-weight: 400; letter-spacing: 0; }
 .service-grid { display: grid; gap: 0.7rem; }
 .service-grid.compact { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
 .service-grid.detail { grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); }
-.add-service { display: flex; min-height: 3.8rem; align-items: center; justify-content: center; gap: 0.45rem; border: 1px dashed rgb(96 165 250 / 30%); border-radius: 0.8rem; background: transparent; color: #70829a; cursor: pointer; transition: 160ms ease; }
-.detail .add-service { min-height: 11.5rem; }
-.add-service:hover { border-color: rgb(96 165 250 / 65%); background: rgb(30 64 175 / 8%); color: #93c5fd; }
+.add-service { display: flex; min-height: 3.8rem; align-items: center; justify-content: center; gap: 0.45rem; border: 1px dashed rgb(96 165 250 / 30%); border-radius: 0.8rem; background: transparent; color: var(--sc-muted); cursor: pointer; transition: 160ms ease; }
+.add-service:hover { border-color: rgb(96 165 250 / 65%); background: rgb(30 64 175 / 8%); color: var(--sc-accent); }
 @media (max-width: 520px) { h2 small { display: block; margin: 0.25rem 0 0; } }
 </style>

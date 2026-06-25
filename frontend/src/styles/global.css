@@ -3,10 +3,44 @@
 :root {
   color-scheme: dark;
   font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
-  background: #080d17;
-  color: #e8edf7;
+  --sc-bg: #080d17;
+  --sc-bg-soft: #0b121f;
+  --sc-surface: #101827;
+  --sc-surface-muted: #0c1320;
+  --sc-card: rgb(14 22 37 / 86%);
+  --sc-card-hover: rgb(18 29 48 / 96%);
+  --sc-border: rgb(148 163 184 / 13%);
+  --sc-text: #e8edf7;
+  --sc-muted: #75859b;
+  --sc-subtle: #52627a;
+  --sc-icon-bg: #090f1a;
+  --sc-accent: #5da9ff;
+  --sc-success: #34d399;
+  --sc-body-gradient:
+    radial-gradient(circle at 18% 4%, rgb(56 139 253 / 9%), transparent 36rem), #080d17;
+  background: var(--sc-bg);
+  color: var(--sc-text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+:root.theme-light {
+  color-scheme: light;
+  --sc-bg: #f4f7fb;
+  --sc-bg-soft: #ffffff;
+  --sc-surface: #ffffff;
+  --sc-surface-muted: #eef3f9;
+  --sc-card: rgb(255 255 255 / 92%);
+  --sc-card-hover: #ffffff;
+  --sc-border: rgb(30 41 59 / 12%);
+  --sc-text: #172033;
+  --sc-muted: #657184;
+  --sc-subtle: #8a97a8;
+  --sc-icon-bg: #eef4fb;
+  --sc-accent: #2563eb;
+  --sc-success: #059669;
+  --sc-body-gradient:
+    radial-gradient(circle at 18% 4%, rgb(37 99 235 / 10%), transparent 34rem), #f4f7fb;
 }
 
 * {
@@ -15,13 +49,14 @@
 html {
   min-width: 320px;
   min-height: 100%;
-  background: #080d17;
+  background: var(--sc-bg);
 }
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: radial-gradient(circle at 18% 4%, rgb(56 139 253 / 9%), transparent 36rem), #080d17;
+  background: var(--sc-body-gradient);
+  color: var(--sc-text);
 }
 button,
 input,
