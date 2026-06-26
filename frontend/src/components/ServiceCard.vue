@@ -29,8 +29,19 @@ const iconUrl = computed(() => props.service.icon_url || props.service.icon_valu
 const subtitle = computed(
   () =>
     props.service.description ||
+    props.service.docker_name ||
     props.service.docker_image ||
     (!activeUrl.value ? '未配置访问地址' : ''),
+)
+const hoverTitle = computed(() =>
+  [
+    props.service.name,
+    props.service.docker_name ? `Docker：${props.service.docker_name}` : '',
+    props.service.docker_image ? `镜像：${props.service.docker_image}` : '',
+    activeUrl.value ? `地址：${activeUrl.value}` : '未配置访问地址',
+  ]
+    .filter(Boolean)
+    .join('\n'),
 )
 
 watch(iconUrl, () => {
@@ -55,14 +66,14 @@ function trackPoints(track: MonitorTrack): StatusPoint[] {
 </script>
 
 <template>
-  <article class="service-card" :class="[cardMode, { 'no-url': !activeUrl, sorting }]" @click="open">
+  <article class="service-card" :class="[cardMode, { 'no-url': !activeUrl, sorting }]" :title="hoverTitle" @click="open">
     <div class="service-icon">
       <img v-if="iconUrl && !iconFailed" :src="iconUrl" :alt="service.name" @error="iconFailed = true" />
       <NIcon v-else :component="Photo" />
     </div>
     <div class="identity">
-      <h3>{{ service.name }}</h3>
-      <p v-if="cardMode === 'detail' && subtitle">{{ subtitle }}</p>
+      <h3 :title="service.name">{{ service.name }}</h3>
+      <p v-if="cardMode === 'detail' && subtitle" :title="subtitle">{{ subtitle }}</p>
     </div>
     <StatusBadge :status="service.status" />
 

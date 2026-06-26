@@ -9,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
@@ -48,20 +49,58 @@ async fn suggest(Query(query): Query<NameQuery>) -> Json<selfhst::IconSuggestion
     Json(selfhst::suggest(&query.name))
 }
 
-async fn test(Query(query): Query<ReferenceQuery>) -> AppResult<Json<serde_json::Value>> {
-    let client = reqwest::Client::new();
+async fn test(
+    State(state): State<AppState>,
+    Query(query): Query<ReferenceQuery>,
+) -> AppResult<Json<serde_json::Value>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(anyhow::Error::from)?;
     for url in selfhst::urls(&query.reference) {
         tracing::info!(reference = %query.reference, url, "测试 selfh.st 图标地址");
-        if client
-            .get(&url)
-            .send()
-            .await
-            .is_ok_and(|response| response.status().is_success())
-        {
-            return Ok(Json(serde_json::json!({ "ok": true, "url": url })));
+        if let Some(local_url) = download_selfhst_icon(&state, &client, &url).await? {
+            tracing::info!(reference = %query.reference, local_url, "selfh.st 图标已下载到本地");
+            return Ok(Json(serde_json::json!({ "ok": true, "url": local_url })));
         }
     }
     Err(AppError::NotFound)
+}
+
+async fn download_selfhst_icon(
+    state: &AppState,
+    client: &reqwest::Client,
+    url: &str,
+) -> AppResult<Option<String>> {
+    let response = match client.get(url).send().await {
+        Ok(response) if response.status().is_success() => response,
+        Ok(_) | Err(_) => return Ok(None),
+    };
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or_default()
+        .to_string();
+    let extension = image_extension(&content_type)
+        .or_else(|| extension_from_url(url))
+        .ok_or_else(|| AppError::Validation("selfh.st 图标格式不支持".into()))?;
+    let bytes = response.bytes().await.map_err(anyhow::Error::from)?;
+    if bytes.is_empty() || bytes.len() > 2 * 1024 * 1024 {
+        return Err(AppError::Validation(
+            "selfh.st 图标大小必须在 2 MB 以内".into(),
+        ));
+    }
+    let directory = icon_directory(state);
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(anyhow::Error::from)?;
+    let filename = format!("selfhst-{}.{}", Uuid::new_v4(), extension);
+    tokio::fs::write(directory.join(&filename), bytes)
+        .await
+        .map_err(anyhow::Error::from)?;
+    Ok(Some(format!("/api/icons/custom/{filename}")))
 }
 
 async fn discover_favicon(Query(query): Query<UrlQuery>) -> AppResult<Json<serde_json::Value>> {
@@ -127,6 +166,7 @@ async fn custom_icon(
         Some("png") => "image/png",
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
         Some("ico") => "image/x-icon",
         _ => "application/octet-stream",
     };
@@ -152,7 +192,20 @@ fn image_extension(content_type: &str) -> Option<&'static str> {
         "image/png" => Some("png"),
         "image/jpeg" => Some("jpg"),
         "image/webp" => Some("webp"),
+        "image/svg+xml" => Some("svg"),
         "image/x-icon" | "image/vnd.microsoft.icon" => Some("ico"),
         _ => None,
+    }
+}
+
+fn extension_from_url(url: &str) -> Option<&'static str> {
+    if url.ends_with(".svg") {
+        Some("svg")
+    } else if url.ends_with(".png") {
+        Some("png")
+    } else if url.ends_with(".webp") {
+        Some("webp")
+    } else {
+        None
     }
 }

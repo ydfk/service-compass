@@ -16,7 +16,7 @@ import {
   type DataTableColumns,
   type PaginationProps,
 } from 'naive-ui'
-import { h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { groupsApi, type GroupInput } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
@@ -41,6 +41,7 @@ const editingGroup = ref<Group | null>(null)
 const editingService = ref<Service | null>(null)
 const serviceEditorTitle = ref('添加服务')
 const draggingGroupId = ref<string | null>(null)
+const search = ref('')
 const groupForm = ref<GroupInput>({ name: '', description: '', sort_order: 0 })
 const serviceForm = ref<ServiceInput>(emptyService())
 const httpMonitor = ref<MonitorInput>(emptyHttpMonitor())
@@ -51,6 +52,24 @@ const tablePagination = reactive<PaginationProps>({
   pageSize: 20,
   pageSizes: [20, 50, 100],
   showSizePicker: true,
+})
+const filteredServices = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+  if (!keyword) return services.value
+  return services.value.filter((service) => {
+    const groupName = groups.value.find((item) => item.id === service.group_id)?.name ?? '未分组'
+    return searchableText(
+      service.name,
+      service.description,
+      groupName,
+      service.public_url,
+      service.local_url,
+      service.docker_name,
+      service.docker_image,
+      service.docker_compose_project,
+      service.docker_compose_service,
+    ).includes(keyword)
+  })
 })
 
 const columns: DataTableColumns<Service> = [
@@ -105,6 +124,10 @@ function action(
     { size: 'small', secondary: true, type, onClick },
     { icon: () => h(NIcon, { component: icon }), default: () => label },
   )
+}
+
+function searchableText(...values: Array<string | null | undefined>) {
+  return values.filter(Boolean).join(' ').toLowerCase()
 }
 
 async function load() {
@@ -227,9 +250,12 @@ onMounted(async () => {
 <template>
   <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
   <section v-if="groups.length" class="group-strip"><div v-for="group in groups" :key="group.id" class="group-item" :class="{ dragging: draggingGroupId === group.id }" draggable="true" @dragstart="startGroupDrag(group)" @dragend="draggingGroupId = null" @dragover.prevent @drop.prevent="dropGroup(group)"><NCard size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务 · 可拖拽排序</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></div></section>
+  <NCard class="filter-card" size="small">
+    <NInput v-model:value="search" clearable placeholder="搜索服务、分组、地址、Docker 名称或镜像" />
+  </NCard>
   <NDataTable
     :columns="columns"
-    :data="services"
+    :data="filteredServices"
     :loading="loading"
     :row-key="(row: Service) => row.id"
     :pagination="tablePagination"
@@ -261,6 +287,7 @@ onMounted(async () => {
 .group-item { cursor: grab; transition: opacity 160ms ease, transform 160ms ease; }
 .group-item.dragging { opacity: 0.45; transform: scale(0.98); }
 .group-strip div { display: grid; }
+.filter-card { margin-bottom: 0.8rem; }
 .group-modal { width: min(28rem, calc(100vw - 1.5rem)); }
 @media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } }
 </style>

@@ -233,7 +233,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.dashboard-shell { width: min(88rem, 100%); margin: auto; padding: 0 1.5rem 4rem; }
+.dashboard-shell { width: min(108rem, 100%); margin: auto; padding: 0 1.5rem 4rem; }
 .topbar { display: flex; min-height: 4.6rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgb(148 163 184 / 10%); }
 .brand { display: flex; flex: 0 0 auto; align-items: center; gap: 0.7rem; color: inherit; text-decoration: none; }
 .brand img { width: 2.2rem; }.brand span { display: grid; }.brand strong { font-family: "IBM Plex Mono", monospace; font-size: 0.86rem; }.brand small { color: var(--sc-muted); font-size: 0.66rem; }

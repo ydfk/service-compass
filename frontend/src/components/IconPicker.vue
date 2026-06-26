@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ExternalLink, Photo, Search, Upload } from '@vicons/tabler'
+import { ExternalLink, Photo, Search, Square, Upload } from '@vicons/tabler'
 import { NButton, NIcon, NInput, NSelect, NSpace, useMessage } from 'naive-ui'
 import { computed, ref, watch } from 'vue'
 import { iconsApi } from '../api/icons'
@@ -18,6 +18,7 @@ const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const previewFailed = ref(false)
 const faviconOptions = ref<string[]>([])
+const selfhstController = ref<AbortController | null>(null)
 const message = useMessage()
 
 const preview = computed(() => {
@@ -36,20 +37,34 @@ watch(preview, () => {
 
 async function suggest() {
   if (!props.name.trim()) return message.warning('请先填写服务名称')
+  selfhstController.value?.abort()
+  const controller = new AbortController()
+  selfhstController.value = controller
   loading.value = true
   try {
     const suggestion = await iconsApi.suggest(props.name)
     try {
-      const result = await iconsApi.test(suggestion.reference)
-      emit('update:iconType', 'selfhst')
-      emit('update:iconValue', suggestion.reference)
-      message.success(`已匹配 ${suggestion.reference} · ${result.url.split('/').at(-1)}`)
-    } catch {
+      const result = await iconsApi.test(suggestion.reference, controller.signal)
+      emit('update:iconType', 'upload')
+      emit('update:iconValue', result.url)
+      message.success(`已下载 ${suggestion.reference} 到本地图标库`)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        message.info('已停止匹配 selfh.st')
+        return
+      }
       message.warning(`未匹配到“${suggestion.reference}”，请浏览图标库或手动输入正确的 reference`)
     }
   } finally {
-    loading.value = false
+    if (selfhstController.value === controller) {
+      loading.value = false
+      selfhstController.value = null
+    }
   }
+}
+
+function stopSuggest() {
+  selfhstController.value?.abort()
 }
 
 async function upload(event: Event) {
@@ -121,6 +136,9 @@ function faviconLabel(value: string) {
       <NSpace>
         <NButton size="small" :loading="loading" @click="suggest">
           <template #icon><NIcon :component="Photo" /></template>匹配 selfh.st
+        </NButton>
+        <NButton v-if="selfhstController" size="small" type="warning" secondary @click="stopSuggest">
+          <template #icon><NIcon :component="Square" /></template>停止
         </NButton>
         <a class="icon-library-link" href="https://selfh.st/icons/" target="_blank" rel="noopener noreferrer">
           <NIcon :component="ExternalLink" />浏览图标库

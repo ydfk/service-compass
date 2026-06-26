@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BrandDocker, ChartRadar, Edit, PlugConnected, Plus, Trash } from '@vicons/tabler'
-import { NAlert, NButton, NCard, NIcon, NSpace, useDialog, useMessage } from 'naive-ui'
-import { onMounted, ref } from 'vue'
+import { NAlert, NButton, NCard, NIcon, NInput, NSpace, useDialog, useMessage } from 'naive-ui'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { dockerApi } from '../api/docker'
 import DockerCandidateTable from '../components/DockerCandidateTable.vue'
@@ -13,8 +13,23 @@ const candidates = ref<DockerCandidate[]>([])
 const editing = ref<DockerEndpoint | null>(null)
 const endpointModal = ref(false)
 const scanning = ref(false)
+const search = ref('')
 const message = useMessage()
 const dialog = useDialog()
+const filteredEndpoints = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+  if (!keyword) return endpoints.value
+  return endpoints.value.filter((endpoint) =>
+    searchableText(
+      endpoint.name,
+      endpoint.endpoint_type,
+      endpoint.endpoint_url,
+      endpoint.lan_host,
+      endpoint.public_host_hint,
+      endpointTypeText(endpoint),
+    ).includes(keyword),
+  )
+})
 
 async function load() {
   endpoints.value = await dockerApi.endpoints()
@@ -64,6 +79,10 @@ function endpointTypeText(endpoint: DockerEndpoint) {
   return '远程 TCP'
 }
 
+function searchableText(...values: Array<string | null | undefined>) {
+  return values.filter(Boolean).join(' ').toLowerCase()
+}
+
 onMounted(load)
 </script>
 
@@ -81,8 +100,9 @@ onMounted(load)
   <NAlert type="warning" :bordered="false" class="risk">
     Docker Socket 即使只读挂载也拥有很高权限。只在可信内网使用，远程 API 应启用 TLS。
   </NAlert>
+  <NInput v-model:value="search" clearable placeholder="搜索 Endpoint 名称、地址或类型" class="endpoint-search" />
   <section class="endpoint-grid">
-    <NCard v-for="endpoint in endpoints" :key="endpoint.id" size="small" class="endpoint-card">
+    <NCard v-for="endpoint in filteredEndpoints" :key="endpoint.id" size="small" class="endpoint-card">
       <div class="endpoint-title">
         <NIcon :component="BrandDocker" />
         <div><strong>{{ endpoint.name }}</strong><small>{{ endpoint.endpoint_url }}</small></div>
@@ -111,6 +131,7 @@ onMounted(load)
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .endpoint-title small { color: #75859b; }
 .risk { margin-bottom: 1rem; }
+.endpoint-search { max-width: 28rem; margin-bottom: 0.8rem; }
 .endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 0.85rem; margin-bottom: 1rem; }
 .endpoint-card { min-height: 8.2rem; }
 .endpoint-card :deep(.n-card__content) { display: grid; min-height: 8.2rem; align-content: space-between; padding: 0.9rem; }

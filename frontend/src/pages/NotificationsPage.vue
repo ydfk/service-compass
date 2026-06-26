@@ -43,12 +43,25 @@ const editingChannel = ref<NotificationChannel | null>(null)
 const channelModal = ref(false)
 const channelForm = ref<NotificationChannelInput>(emptyChannel())
 const secrets = ref<ChannelSecrets>(emptySecrets())
+const search = ref('')
 const message = useMessage()
 const dialog = useDialog()
 
 const serviceOptions = computed(() =>
   services.value.map((item) => ({ label: item.name, value: item.id })),
 )
+const filteredChannels = computed(() => {
+  const keyword = search.value.trim().toLowerCase()
+  if (!keyword) return channels.value
+  return channels.value.filter((channel) =>
+    searchableText(
+      channel.name,
+      channel.channel_type,
+      channel.enabled ? '启用' : '停用',
+      scopeText(channel),
+    ).includes(keyword),
+  )
+})
 
 function emptyChannel(): NotificationChannelInput {
   return { name: '', channel_type: 'bark', enabled: true }
@@ -214,6 +227,10 @@ function scopeText(channel: NotificationChannel) {
   return `${ids.length} 个服务`
 }
 
+function searchableText(...values: Array<string | null | undefined>) {
+  return values.filter(Boolean).join(' ').toLowerCase()
+}
+
 onMounted(load)
 </script>
 
@@ -230,8 +247,10 @@ onMounted(load)
     </NButton>
   </header>
 
+  <NInput v-model:value="search" clearable placeholder="搜索通道名称、类型或生效范围" class="channel-search" />
+
   <section class="channel-grid">
-    <NCard v-for="channel in channels" :key="channel.id" size="small" class="channel-card">
+    <NCard v-for="channel in filteredChannels" :key="channel.id" size="small" class="channel-card">
       <div class="channel-title">
         <NIcon :component="Bell" class="channel-icon" />
         <div class="channel-main">
@@ -351,6 +370,7 @@ onMounted(load)
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .channel-title small { color: var(--sc-muted); }
 .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
+.channel-search { max-width: 28rem; margin-bottom: 0.8rem; }
 .channel-card :deep(.n-card__content) { padding: 0.75rem; }
 .channel-title { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.55rem; min-width: 0; }
 .channel-icon { flex: 0 0 auto; font-size: 1.05rem; }

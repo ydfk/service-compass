@@ -11,6 +11,7 @@ import {
   NForm,
   NFormItem,
   NIcon,
+  NInput,
   NModal,
   NSelect,
   NSpace,
@@ -52,6 +53,7 @@ const notificationModal = ref(false)
 const loading = ref(false)
 const selectedGroupId = ref('')
 const selectedServiceId = ref('')
+const search = ref('')
 const message = useMessage()
 
 const serviceById = computed(() => new Map(services.value.map((item) => [item.id, item])))
@@ -80,6 +82,23 @@ const filteredMonitors = computed(() =>
       if (!selectedGroupId.value) return true
       const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
       return service?.group_id === selectedGroupId.value
+    })
+    .filter((monitor) => {
+      const keyword = search.value.trim().toLowerCase()
+      if (!keyword) return true
+      const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
+      const group = service?.group_id ? groupById.value.get(service.group_id) : null
+      return searchableText(
+        monitor.name,
+        monitor.monitor_type,
+        monitor.target_url,
+        monitor.domain,
+        monitor.last_error,
+        service?.name,
+        service?.docker_name,
+        service?.docker_image,
+        group?.name,
+      ).includes(keyword)
     })
     .sort(
       (left, right) =>
@@ -213,6 +232,10 @@ function button(
     { size: 'small', secondary: true, type, onClick },
     { icon: () => h(NIcon, { component: icon }), default: () => label },
   )
+}
+
+function searchableText(...values: Array<string | null | undefined>) {
+  return values.filter(Boolean).join(' ').toLowerCase()
 }
 
 function monitorPoints(monitor: Monitor): StatusPoint[] {
@@ -392,6 +415,12 @@ onMounted(load)
 
   <NCard class="filter-card" size="small">
     <NSpace>
+      <NInput
+        v-model:value="search"
+        clearable
+        placeholder="搜索监控、服务、分组、地址或错误"
+        class="filter-search"
+      />
       <NSelect
         v-model:value="selectedGroupId"
         :options="groupOptions"
@@ -536,6 +565,9 @@ onMounted(load)
 .filter-select {
   width: 14rem;
 }
+.filter-search {
+  width: 20rem;
+}
 :deep(.table-strip) { width: min(13rem, 100%); min-width: 0; }
 :global(.history-drawer-body) { min-width: 0; overflow-x: hidden; }
 :global(.history-drawer-body > *) { min-width: 0; }
@@ -584,6 +616,9 @@ onMounted(load)
     flex-direction: column;
   }
   .filter-select {
+    width: min(100%, 18rem);
+  }
+  .filter-search {
     width: min(100%, 18rem);
   }
   .form-grid {
