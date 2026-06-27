@@ -83,6 +83,10 @@ function searchableText(...values: Array<string | null | undefined>) {
   return values.filter(Boolean).join(' ').toLowerCase()
 }
 
+function clearFilters() {
+  search.value = ''
+}
+
 onMounted(load)
 </script>
 
@@ -100,7 +104,10 @@ onMounted(load)
   <NAlert type="warning" :bordered="false" class="risk">
     Docker Socket 即使只读挂载也拥有很高权限。只在可信内网使用，远程 API 应启用 TLS。
   </NAlert>
-  <NInput v-model:value="search" clearable placeholder="搜索 Endpoint 名称、地址或类型" class="endpoint-search" />
+  <NSpace class="filter-bar">
+    <NInput v-model:value="search" clearable placeholder="搜索 Endpoint 名称、地址或类型" class="endpoint-search" />
+    <NButton secondary @click="clearFilters">清除筛选</NButton>
+  </NSpace>
   <section class="endpoint-grid">
     <NCard v-for="endpoint in filteredEndpoints" :key="endpoint.id" size="small" class="endpoint-card">
       <div class="endpoint-title">
@@ -131,7 +138,8 @@ onMounted(load)
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .endpoint-title small { color: #75859b; }
 .risk { margin-bottom: 1rem; }
-.endpoint-search { max-width: 28rem; margin-bottom: 0.8rem; }
+.filter-bar { width: 100%; margin-bottom: 0.8rem; }
+.endpoint-search { width: min(42rem, 100%); flex: 1 1 24rem; }
 .endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 0.85rem; margin-bottom: 1rem; }
 .endpoint-card { min-height: 8.2rem; }
 .endpoint-card :deep(.n-card__content) { display: grid; min-height: 8.2rem; align-content: space-between; padding: 0.9rem; }

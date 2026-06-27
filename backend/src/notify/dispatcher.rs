@@ -43,11 +43,24 @@ pub async fn dispatch(
         tracing::warn!(monitor_id = %monitor.id, "读取通知规则失败");
         return;
     };
+    if targets.is_empty() {
+        record_delivery(
+            state,
+            monitor,
+            None,
+            event_type,
+            None,
+            Some("没有可用通知通道或通知规则".into()),
+        )
+        .await;
+        return;
+    }
     let service = load_service(state, monitor).await;
     let event = NotificationEvent {
         event_type: event_type.into(),
         monitor_id: monitor.id.clone(),
         monitor_name: monitor.name.clone(),
+        check_label: check_label(monitor).into(),
         service_name: service.as_ref().map(|item| item.0.clone()),
         status: result.status.clone(),
         message: result
@@ -64,9 +77,28 @@ pub async fn dispatch(
     };
     let client = reqwest::Client::new();
     for target in targets {
-        if !enabled_for(&target, event_type)
-            || in_cooldown(state, monitor, &target, event_type).await
-        {
+        if !enabled_for(&target, event_type) {
+            record_delivery(
+                state,
+                monitor,
+                Some(&target),
+                event_type,
+                None,
+                Some("当前事件类型未启用通知".into()),
+            )
+            .await;
+            continue;
+        }
+        if in_cooldown(state, monitor, &target, event_type).await {
+            record_delivery(
+                state,
+                monitor,
+                Some(&target),
+                event_type,
+                None,
+                Some("通知冷却中，已跳过发送".into()),
+            )
+            .await;
             continue;
         }
         let config = state
@@ -79,7 +111,7 @@ pub async fn dispatch(
             record_delivery(
                 state,
                 monitor,
-                &target,
+                Some(&target),
                 event_type,
                 None,
                 Some("通知配置解密失败".into()),
@@ -88,17 +120,42 @@ pub async fn dispatch(
             continue;
         };
         if !channel_allows_service(&config, monitor.service_id.as_deref()) {
+            record_delivery(
+                state,
+                monitor,
+                Some(&target),
+                event_type,
+                None,
+                Some("通知通道未作用于当前服务".into()),
+            )
+            .await;
             continue;
         }
         match notify::send(&client, &target.channel_type, &config, &event).await {
             Ok(result) => {
-                record_delivery(state, monitor, &target, event_type, Some(result), None).await
+                record_delivery(
+                    state,
+                    monitor,
+                    Some(&target),
+                    event_type,
+                    Some(result),
+                    None,
+                )
+                .await
             }
             Err(error) => {
                 let message = error.to_string();
                 let result = notify::failure_result(&error);
                 tracing::warn!(channel_id = %target.channel_id, ?error, "通知发送失败");
-                record_delivery(state, monitor, &target, event_type, result, Some(message)).await;
+                record_delivery(
+                    state,
+                    monitor,
+                    Some(&target),
+                    event_type,
+                    result,
+                    Some(message),
+                )
+                .await;
             }
         }
     }
@@ -116,10 +173,21 @@ fn default_message(status: &str) -> String {
 
 fn transition(previous: &str, current: &str) -> Option<&'static str> {
     match (previous, current) {
-        ("up", "down") | ("warning", "down") => Some("monitor_down"),
+        ("up", "down") | ("warning", "down") | ("unknown", "down") => Some("monitor_down"),
         ("down", "up") | ("warning", "up") => Some("monitor_recovery"),
-        ("up", "warning") => Some("monitor_warning"),
+        ("up", "warning") | ("unknown", "warning") => Some("monitor_warning"),
         _ => None,
+    }
+}
+
+fn check_label(monitor: &MonitorRow) -> &'static str {
+    match monitor.monitor_type.as_str() {
+        "http" => "HTTP",
+        "http_keyword" => "HTTP 关键字",
+        "docker" => "Docker",
+        "cert" => "HTTPS 证书",
+        "dns" => "DNS",
+        _ => "监控检查",
     }
 }
 
@@ -156,7 +224,7 @@ async fn in_cooldown(
 async fn record_delivery(
     state: &AppState,
     monitor: &MonitorRow,
-    target: &DeliveryTarget,
+    target: Option<&DeliveryTarget>,
     event_type: &str,
     result: Option<SendResult>,
     error_message: Option<String>,
@@ -181,7 +249,7 @@ async fn record_delivery(
     )
     .bind(Uuid::new_v4().to_string())
     .bind(&monitor.id)
-    .bind(&target.channel_id)
+    .bind(target.map(|item| &item.channel_id))
     .bind(event_type)
     .bind(success)
     .bind(request_method)
@@ -230,7 +298,9 @@ mod tests {
     fn only_relevant_status_changes_emit_events() {
         assert_eq!(transition("up", "down"), Some("monitor_down"));
         assert_eq!(transition("down", "up"), Some("monitor_recovery"));
-        assert_eq!(transition("unknown", "down"), None);
+        assert_eq!(transition("unknown", "down"), Some("monitor_down"));
+        assert_eq!(transition("unknown", "warning"), Some("monitor_warning"));
+        assert_eq!(transition("unknown", "up"), None);
         assert_eq!(transition("down", "down"), None);
     }
 

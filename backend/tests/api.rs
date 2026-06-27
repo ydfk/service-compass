@@ -90,7 +90,7 @@ async fn service_can_be_created_without_group_and_with_monitor() {
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"group_id":null,"name":"No Group","public_url":"https://example.com","preferred_url_mode":"public","docker_endpoint_id":"endpoint-1","docker_container_id":"container-1","create_monitor":true,"monitor":{"name":"Keyword","monitor_type":"http_keyword","target_url_mode":"public","keyword":"Example Domain"}}"#,
+                    r#"{"group_id":null,"name":"No Group","public_url":"https://example.com","docker_endpoint_id":"endpoint-1","docker_container_id":"container-1","create_monitor":true,"monitor":{"name":"Keyword","monitor_type":"http_keyword","target_url_mode":"public","keyword":"Example Domain"}}"#,
                 ))
                 .unwrap(),
         )
@@ -141,7 +141,7 @@ async fn service_can_be_created_without_urls() {
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"group_id":null,"name":"Only Display","preferred_url_mode":"public","icon_type":"initial","enabled":true,"sort_order":0,"create_monitor":false,"cert_expiry_notify":false}"#,
+                    r#"{"group_id":null,"name":"Only Display","icon_type":"initial","enabled":true,"sort_order":0,"create_monitor":false,"cert_expiry_notify":false}"#,
                 ))
                 .unwrap(),
         )
@@ -152,6 +152,7 @@ async fn service_can_be_created_without_urls() {
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(payload["public_url"].is_null());
     assert!(payload["local_url"].is_null());
+    assert!(payload.get("preferred_url_mode").is_none());
 }
 
 #[tokio::test]

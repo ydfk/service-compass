@@ -112,6 +112,7 @@ async fn test_channel(
         event_type: "test".into(),
         monitor_id: "test".into(),
         monitor_name: "通知测试".into(),
+        check_label: "测试通知".into(),
         service_name: Some("ServiceCompass".into()),
         status: "up".into(),
         message: "这是一条 ServiceCompass 测试通知".into(),

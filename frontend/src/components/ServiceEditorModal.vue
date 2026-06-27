@@ -25,7 +25,6 @@ import type {
   NotificationChannel,
   ServiceInput,
   Space,
-  UrlMode,
 } from '../types'
 import DockerEndpointModal from './DockerEndpointModal.vue'
 import IconPicker from './IconPicker.vue'
@@ -176,6 +175,10 @@ async function scan() {
 
 function selectCandidate(containerId: string | null) {
   selectedCandidate.value = containerId
+  if (!containerId) {
+    clearDockerSelection(false)
+    return
+  }
   const candidate = candidates.value.find((item) => item.container_id === containerId)
   if (!candidate) return
   form.value.docker_endpoint_id = candidate.endpoint_id
@@ -185,11 +188,27 @@ function selectCandidate(containerId: string | null) {
   form.value.docker_compose_project = candidate.compose_project
   form.value.docker_compose_service = candidate.compose_service
   form.value.name ||= candidate.suggested_name
-  form.value.local_url ||= candidate.local_url
-  form.value.public_url ||= candidate.public_url
+  fillEmptyUrl('local_url', candidate.local_url)
+  fillEmptyUrl('public_url', candidate.public_url)
   if (!form.value.icon_value && candidate.suggested_icon) {
     form.value.icon_type = 'selfhst'
     form.value.icon_value = candidate.suggested_icon
+  }
+}
+
+function fillEmptyUrl(field: 'local_url' | 'public_url', value?: string | null) {
+  if (form.value[field]) return
+  if (!isValidServiceUrl(value)) return
+  form.value[field] = value
+}
+
+function isValidServiceUrl(value?: string | null) {
+  if (!value) return false
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname)
+  } catch {
+    return false
   }
 }
 
@@ -235,12 +254,19 @@ function applyDefaultNotification() {
             <NButton type="primary" :loading="creatingGroup" @click="createGroup">创建</NButton>
           </div>
         </NFormItem>
-        <NFormItem label="默认访问">
-          <NSelect v-model:value="form.preferred_url_mode" :options="[{ label: '外网', value: 'public' as UrlMode }, { label: '内网', value: 'local' as UrlMode }]" />
-        </NFormItem>
         <NFormItem label="说明（可选）" class="span-2"><NInput v-model:value="form.description" /></NFormItem>
         <NFormItem label="服务图标" class="span-2">
-          <IconPicker :name="form.name" :icon-type="form.icon_type" :icon-value="form.icon_value" :service-url="form.public_url || form.local_url" @update:icon-type="form.icon_type = $event" @update:icon-value="form.icon_value = $event" />
+          <IconPicker
+            :name="form.name"
+            :icon-type="form.icon_type"
+            :icon-value="form.icon_value"
+            :service-url="form.public_url || form.local_url"
+            :auth-type="monitor.auth_type"
+            :auth-username="monitor.auth_username"
+            :auth-password="monitor.auth_password"
+            @update:icon-type="form.icon_type = $event"
+            @update:icon-value="form.icon_value = $event"
+          />
         </NFormItem>
       </div>
 

@@ -153,12 +153,12 @@ const ignoreTlsErrors = computed({
       </NFormItem>
     </template>
     <div v-if="['http', 'http_keyword'].includes(model.monitor_type)" class="form-grid">
-      <NFormItem label="Basic Auth">
+      <NFormItem label="验证">
         <NSelect
           v-model:value="model.auth_type"
           :options="[
-            { label: '不使用', value: 'none' },
-            { label: '用户名 / 密码', value: 'basic' },
+            { label: '无', value: 'none' },
+            { label: 'HTTP 基础身份验证', value: 'basic' },
           ]"
         />
       </NFormItem>

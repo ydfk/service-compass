@@ -28,15 +28,18 @@ struct ReferenceQuery {
 }
 
 #[derive(Deserialize)]
-struct UrlQuery {
+struct FaviconInput {
     url: String,
+    auth_type: Option<String>,
+    auth_username: Option<String>,
+    auth_password: Option<String>,
 }
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/icons/suggest", get(suggest))
         .route("/api/icons/test", get(test))
-        .route("/api/icons/favicon", get(discover_favicon))
+        .route("/api/icons/favicon", post(discover_favicon))
         .route("/api/icons/upload", post(upload))
 }
 
@@ -103,17 +106,38 @@ async fn download_selfhst_icon(
     Ok(Some(format!("/api/icons/custom/{filename}")))
 }
 
-async fn discover_favicon(Query(query): Query<UrlQuery>) -> AppResult<Json<serde_json::Value>> {
-    tracing::info!(service_url = %query.url, "开始发现服务 favicon");
+async fn discover_favicon(Json(input): Json<FaviconInput>) -> AppResult<Json<serde_json::Value>> {
+    let url = input.url.trim();
+    if url.is_empty() {
+        return Err(AppError::Validation("服务地址不能为空".into()));
+    }
+    tracing::info!(service_url = %url, "开始发现服务 favicon");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(anyhow::Error::from)?;
-    let urls = favicon::discover(&client, &query.url)
-        .await
-        .map_err(AppError::Internal)?;
-    tracing::info!(service_url = %query.url, count = urls.len(), "服务 favicon 发现完成");
+    let auth = favicon_auth(&input);
+    let urls = match favicon::discover(&client, url, auth.as_ref()).await {
+        Ok(urls) => urls,
+        Err(error) if error.to_string().contains("未发现 favicon") => Vec::new(),
+        Err(error) if error.to_string().contains("服务 URL 无效") => {
+            return Err(AppError::Validation("服务地址格式无效".into()));
+        }
+        Err(error) => return Err(AppError::Internal(error)),
+    };
+    tracing::info!(service_url = %url, count = urls.len(), "服务 favicon 发现完成");
     Ok(Json(serde_json::json!({ "urls": urls })))
+}
+
+fn favicon_auth(input: &FaviconInput) -> Option<favicon::FaviconAuth> {
+    if input.auth_type.as_deref() != Some("basic") {
+        return None;
+    }
+    Some(favicon::FaviconAuth {
+        username: input.auth_username.clone().unwrap_or_default(),
+        password: input.auth_password.clone().unwrap_or_default(),
+    })
+    .filter(|auth| !auth.username.trim().is_empty() || !auth.password.is_empty())
 }
 
 async fn upload(
@@ -125,8 +149,9 @@ async fn upload(
             continue;
         }
         let content_type = field.content_type().unwrap_or_default().to_string();
-        let extension = image_extension(&content_type)
-            .ok_or_else(|| AppError::Validation("仅支持 PNG、JPEG、WebP 或 ICO 图标".into()))?;
+        let extension = image_extension(&content_type).ok_or_else(|| {
+            AppError::Validation("仅支持 PNG、JPEG、WebP、SVG 或 ICO 图标".into())
+        })?;
         let bytes = field.bytes().await.map_err(anyhow::Error::from)?;
         if bytes.is_empty() || bytes.len() > 2 * 1024 * 1024 {
             return Err(AppError::Validation("图标大小必须在 2 MB 以内".into()));

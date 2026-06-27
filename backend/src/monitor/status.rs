@@ -68,6 +68,7 @@ pub async fn persist(
     .execute(&state.pool)
     .await?;
     crate::notify::dispatcher::dispatch(state, monitor, &previous_status, result, &now_text).await;
+    let _ = state.dashboard_events.send(now_text.clone());
     tracing::info!(
         monitor_id = %monitor.id,
         previous_status,

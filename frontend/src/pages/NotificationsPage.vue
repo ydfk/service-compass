@@ -52,6 +52,7 @@ const deliveryModal = ref(false)
 const channelForm = ref<NotificationChannelInput>(emptyChannel())
 const secrets = ref<ChannelSecrets>(emptySecrets())
 const search = ref('')
+const deliverySearch = ref('')
 const message = useMessage()
 const dialog = useDialog()
 const deliveryPagination = reactive<PaginationProps>({
@@ -72,6 +73,22 @@ const filteredChannels = computed(() => {
       channel.channel_type,
       channel.enabled ? '启用' : '停用',
       scopeText(channel),
+    ).includes(keyword),
+  )
+})
+const filteredDeliveries = computed(() => {
+  const keyword = deliverySearch.value.trim().toLowerCase()
+  if (!keyword) return deliveries.value
+  return deliveries.value.filter((delivery) =>
+    searchableText(
+      delivery.service_name,
+      delivery.monitor_name,
+      delivery.channel_name,
+      delivery.channel_type,
+      eventLabel(delivery.event_type),
+      delivery.request_url,
+      delivery.response_summary,
+      delivery.error_message,
     ).includes(keyword),
   )
 })
@@ -312,6 +329,14 @@ function openDelivery(row: NotificationDelivery) {
   deliveryModal.value = true
 }
 
+function clearChannelFilters() {
+  search.value = ''
+}
+
+function clearDeliveryFilters() {
+  deliverySearch.value = ''
+}
+
 function searchableText(...values: Array<string | null | undefined>) {
   return values.filter(Boolean).join(' ').toLowerCase()
 }
@@ -332,7 +357,10 @@ onMounted(load)
     </NButton>
   </header>
 
-  <NInput v-model:value="search" clearable placeholder="搜索通道名称、类型或生效范围" class="channel-search" />
+  <NSpace class="filter-bar">
+    <NInput v-model:value="search" clearable placeholder="搜索通道名称、类型或生效范围" class="wide-search" />
+    <NButton secondary @click="clearChannelFilters">清除筛选</NButton>
+  </NSpace>
 
   <section class="channel-grid">
     <NCard v-for="channel in filteredChannels" :key="channel.id" size="small" class="channel-card">
@@ -362,11 +390,15 @@ onMounted(load)
       <span class="history-title"><NIcon :component="History" /> 通知收件箱</span>
     </template>
     <template #header-extra>
-      <NButton size="small" @click="load">刷新</NButton>
+      <NSpace>
+        <NInput v-model:value="deliverySearch" clearable placeholder="搜索通知历史、接口、响应或错误" class="delivery-search" />
+        <NButton size="small" secondary @click="clearDeliveryFilters">清除筛选</NButton>
+        <NButton size="small" @click="load">刷新</NButton>
+      </NSpace>
     </template>
     <NDataTable
       :columns="deliveryColumns"
-      :data="deliveries"
+      :data="filteredDeliveries"
       :pagination="deliveryPagination"
       size="small"
       :row-key="(row: NotificationDelivery) => row.id"
@@ -500,7 +532,9 @@ onMounted(load)
 .page-header h1 { margin: 0.35rem 0; font-size: 2.35rem; }
 .page-header span, .channel-title small { color: var(--sc-muted); }
 .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
-.channel-search { max-width: 28rem; margin-bottom: 0.8rem; }
+.filter-bar { width: 100%; margin-bottom: 0.8rem; }
+.wide-search { width: min(42rem, 100%); flex: 1 1 24rem; }
+.delivery-search { width: min(34rem, 52vw); }
 .channel-card :deep(.n-card__content) { padding: 0.75rem; }
 .channel-title { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.55rem; min-width: 0; }
 .channel-icon { flex: 0 0 auto; font-size: 1.05rem; }

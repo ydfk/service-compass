@@ -140,7 +140,8 @@ pub fn status_message(event: &NotificationEvent) -> String {
         .unwrap_or_default();
 
     format!(
-        "{status} · {service}\n{detail}\n\n服务：{service}\n监控：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}",
+        "{status} · {service} · {check_label}\n{detail}\n\n服务：{service}\n检查项：{check_label}\n监控名称：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}\n\n—— ServiceCompass ——",
+        check_label = event.check_label,
         monitor = event.monitor_name
     )
 }
@@ -177,6 +178,7 @@ mod tests {
             event_type: "monitor_down".into(),
             monitor_id: "monitor-1".into(),
             monitor_name: "HTTP".into(),
+            check_label: "HTTP".into(),
             service_name: Some("new-api".into()),
             status: "down".into(),
             message: "Request failed with status code 404".into(),
@@ -187,12 +189,16 @@ mod tests {
         };
 
         let message = status_message(&event);
-        assert!(message.starts_with("🔴 Down · new-api\nRequest failed with status code 404"));
+        assert!(
+            message.starts_with("🔴 Down · new-api · HTTP\nRequest failed with status code 404")
+        );
         assert!(message.contains("服务：new-api"));
-        assert!(message.contains("监控：HTTP"));
+        assert!(message.contains("检查项：HTTP"));
+        assert!(message.contains("监控名称：HTTP"));
         assert!(message.contains("状态：🔴 Down"));
         assert!(message.contains("响应时间：123 ms"));
         assert!(message.contains("状态码：404"));
         assert!(message.contains("详情：Request failed with status code 404"));
+        assert!(message.ends_with("—— ServiceCompass ——"));
     }
 }

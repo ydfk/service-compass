@@ -1,5 +1,12 @@
 import { api } from './client'
 
+export interface FaviconRequest {
+  url: string
+  auth_type?: 'none' | 'basic'
+  auth_username?: string | null
+  auth_password?: string | null
+}
+
 export const iconsApi = {
   suggest: (name: string) =>
     api<{ reference: string; urls: string[] }>(
@@ -10,8 +17,11 @@ export const iconsApi = {
       `/api/icons/test?reference=${encodeURIComponent(reference)}`,
       { signal },
     ),
-  favicon: (url: string) =>
-    api<{ urls: string[] }>(`/api/icons/favicon?url=${encodeURIComponent(url)}`),
+  favicon: (body: FaviconRequest) =>
+    api<{ urls: string[] }>('/api/icons/favicon', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   upload: (file: File) => {
     const body = new FormData()
     body.append('file', file)

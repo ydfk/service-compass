@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Infallible};
 
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
+    response::sse::{Event, KeepAlive, Sse},
     routing::get,
 };
 use chrono::{Duration, Utc};
@@ -95,8 +96,25 @@ fn default_range() -> String {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/dashboard", get(dashboard))
+        .route("/api/dashboard/events", get(dashboard_events))
         .route("/api/dashboard/summary", get(summary))
         .route("/api/services/{id}/history", get(service_history))
+}
+
+async fn dashboard_events(
+    State(state): State<AppState>,
+) -> Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>> {
+    let mut receiver = state.dashboard_events.subscribe();
+    let stream = async_stream::stream! {
+        loop {
+            match receiver.recv().await {
+                Ok(version) => yield Ok(Event::default().event("dashboard").data(version)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {

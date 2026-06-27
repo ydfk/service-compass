@@ -31,7 +31,6 @@ export interface Service {
   icon_url?: string | null
   local_url?: string | null
   public_url?: string | null
-  preferred_url_mode: UrlMode
   docker_name?: string | null
   docker_image?: string | null
   docker_endpoint_id?: string | null
@@ -81,7 +80,6 @@ export interface ServiceInput {
   icon_value?: string | null
   local_url?: string | null
   public_url?: string | null
-  preferred_url_mode: UrlMode
   enabled: boolean
   sort_order: number
   docker_endpoint_id?: string | null
@@ -242,7 +240,7 @@ export interface NotificationDelivery {
   monitor_id?: string | null
   monitor_name?: string | null
   service_name?: string | null
-  channel_id: string
+  channel_id?: string | null
   channel_name?: string | null
   channel_type?: NotificationChannel['channel_type'] | null
   event_type: string

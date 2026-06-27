@@ -148,9 +148,9 @@ async fn add_candidate(
     let mut transaction = state.pool.begin().await?;
     sqlx::query(
         "INSERT INTO services (id, group_id, name, icon_type, icon_value, local_url, public_url, \
-         preferred_url_mode, docker_endpoint_id, docker_container_id, docker_name, docker_image, \
+         docker_endpoint_id, docker_container_id, docker_name, docker_image, \
          docker_compose_project, docker_compose_service, enabled, sort_order, created_at, updated_at) \
-         VALUES (?, ?, ?, 'selfhst', ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)",
+         VALUES (?, ?, ?, 'selfhst', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)",
     )
     .bind(&service_id)
     .bind(&input.group_id)

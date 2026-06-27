@@ -2,7 +2,7 @@
 import { ArrowsSort, LayoutGrid, ListDetails, Login, Settings } from '@vicons/tabler'
 import { NButton, NButtonGroup, NEmpty, NIcon, NSpin, useMessage } from 'naive-ui'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api/client'
 import { groupsApi } from '../api/groups'
@@ -209,6 +209,11 @@ async function loadVersion() {
 
 onMounted(async () => {
   await Promise.all([dashboard.load(), auth.verify(), loadVersion()])
+  dashboard.startAutoRefresh()
+})
+
+onUnmounted(() => {
+  dashboard.stopAutoRefresh()
 })
 </script>
 

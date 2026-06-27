@@ -110,10 +110,7 @@ async fn test_open(
     Path(id): Path<String>,
 ) -> AppResult<Json<serde_json::Value>> {
     let service = find(&state, &id).await?;
-    let url = match service.preferred_url_mode.as_str() {
-        "public" => service.public_url.or(service.local_url),
-        _ => service.local_url.or(service.public_url),
-    };
+    let url = service.public_url.or(service.local_url);
     Ok(Json(serde_json::json!({ "url": url })))
 }
 
@@ -135,9 +132,9 @@ async fn persist(
     let result = if insert {
         sqlx::query(
             "INSERT INTO services (id, group_id, name, description, icon_type, icon_value, local_url, \
-             public_url, preferred_url_mode, docker_endpoint_id, docker_container_id, docker_name, \
+             public_url, docker_endpoint_id, docker_container_id, docker_name, \
              docker_image, docker_compose_project, docker_compose_service, enabled, sort_order, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(id)
         .bind(group_id(input))
@@ -147,7 +144,6 @@ async fn persist(
         .bind(&input.icon_value)
         .bind(clean_url(input.local_url.as_deref()))
         .bind(clean_url(input.public_url.as_deref()))
-        .bind(&input.preferred_url_mode)
         .bind(&input.docker_endpoint_id)
         .bind(&input.docker_container_id)
         .bind(&input.docker_name)
@@ -163,7 +159,7 @@ async fn persist(
     } else {
         sqlx::query(
             "UPDATE services SET group_id = ?, name = ?, description = ?, icon_type = ?, icon_value = ?, \
-             local_url = ?, public_url = ?, preferred_url_mode = ?, docker_endpoint_id = ?, \
+             local_url = ?, public_url = ?, docker_endpoint_id = ?, \
              docker_container_id = ?, docker_name = ?, docker_image = ?, docker_compose_project = ?, \
              docker_compose_service = ?, enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?",
         )
@@ -174,7 +170,6 @@ async fn persist(
         .bind(&input.icon_value)
         .bind(clean_url(input.local_url.as_deref()))
         .bind(clean_url(input.public_url.as_deref()))
-        .bind(&input.preferred_url_mode)
         .bind(&input.docker_endpoint_id)
         .bind(&input.docker_container_id)
         .bind(&input.docker_name)
@@ -271,11 +266,6 @@ fn cert_source_url(input: &ServiceInput, monitor: &MonitorInput) -> Option<Strin
 fn validate(input: &ServiceInput) -> AppResult<()> {
     if input.name.trim().is_empty() {
         return Err(AppError::Validation("服务名称不能为空".into()));
-    }
-    if !matches!(input.preferred_url_mode.as_str(), "local" | "public") {
-        return Err(AppError::Validation(
-            "访问模式必须是 local 或 public".into(),
-        ));
     }
     Ok(())
 }

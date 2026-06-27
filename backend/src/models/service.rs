@@ -13,7 +13,6 @@ pub struct Service {
     pub icon_value: Option<String>,
     pub local_url: Option<String>,
     pub public_url: Option<String>,
-    pub preferred_url_mode: String,
     pub docker_endpoint_id: Option<String>,
     pub docker_container_id: Option<String>,
     pub docker_name: Option<String>,
@@ -36,8 +35,6 @@ pub struct ServiceInput {
     pub icon_value: Option<String>,
     pub local_url: Option<String>,
     pub public_url: Option<String>,
-    #[serde(default = "default_url_mode")]
-    pub preferred_url_mode: String,
     pub docker_endpoint_id: Option<String>,
     pub docker_container_id: Option<String>,
     pub docker_name: Option<String>,
@@ -61,10 +58,6 @@ pub struct ServiceInput {
 
 fn default_icon_type() -> String {
     "auto".into()
-}
-
-fn default_url_mode() -> String {
-    "local".into()
 }
 
 const fn default_enabled() -> bool {

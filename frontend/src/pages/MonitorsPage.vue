@@ -323,6 +323,14 @@ function serviceCell(monitor: Monitor) {
   ])
 }
 
+function clearFilters() {
+  selectedSpaceId.value = ''
+  selectedGroupId.value = ''
+  selectedServiceId.value = ''
+  selectedStatus.value = ''
+  search.value = ''
+}
+
 function monitorRowClass(row: Monitor) {
   const index = filteredMonitors.value.findIndex((item) => item.id === row.id)
   const current = row.service_id || row.id
@@ -363,6 +371,9 @@ function emptyMonitor(): MonitorInput {
     retry_interval_sec: 5,
     follow_redirects: true,
     tls_verify: true,
+    request_body_type: 'json',
+    request_body: '',
+    request_headers: '',
     auth_type: 'none',
     auth_username: '',
     auth_password: '',
@@ -457,7 +468,7 @@ onMounted(load)
   </div>
 
   <NCard class="filter-card" size="small">
-    <NSpace>
+    <NSpace class="filter-bar">
       <NSelect
         v-model:value="selectedSpaceId"
         :options="spaceOptions"
@@ -478,6 +489,7 @@ onMounted(load)
         placeholder="搜索监控、服务、分组、地址或错误"
         class="filter-search"
       />
+      <NButton secondary @click="clearFilters">清除筛选</NButton>
     </NSpace>
   </NCard>
 
@@ -612,11 +624,15 @@ onMounted(load)
 .filter-card {
   margin-bottom: 0.75rem;
 }
+.filter-bar {
+  width: 100%;
+}
 .filter-select {
   width: 14rem;
 }
 .filter-search {
-  width: min(34rem, 100%);
+  width: min(42rem, 100%);
+  flex: 1 1 24rem;
 }
 :deep(.table-strip) { width: min(13rem, 100%); min-width: 0; }
 :global(.history-drawer-body) { min-width: 0; overflow-x: hidden; }

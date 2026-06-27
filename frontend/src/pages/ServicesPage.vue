@@ -185,7 +185,15 @@ function groupScope(groupId: string) {
 }
 
 function serviceStatus(service: Service): Status {
-  return service.status || 'unknown'
+  const related = monitors.value.filter(
+    (item) => item.service_id === service.id && item.enabled && item.monitor_type !== 'cert',
+  )
+  if (related.length === 0) return 'unknown'
+  return (
+    (['down', 'warning', 'unknown', 'up'] as Status[]).find((status) =>
+      related.some((item) => item.current_status === status),
+    ) || 'unknown'
+  )
 }
 
 function serviceSpaceId(service: Service) {
@@ -214,6 +222,13 @@ function selectSpace(spaceId: string) {
 function selectGroup(groupId: string, spaceId: string) {
   selectedSpaceId.value = spaceId
   selectedGroupId.value = selectedGroupId.value === groupId ? '' : groupId
+}
+
+function clearFilters() {
+  selectedSpaceId.value = ''
+  selectedGroupId.value = ''
+  selectedStatus.value = ''
+  search.value = ''
 }
 
 async function load() {
@@ -376,31 +391,33 @@ onMounted(async () => {
         <NButton quaternary circle size="small" @click.stop="openSpace(space)"><NIcon :component="Edit" /></NButton>
       </div>
       <div class="group-chain">
-        <button
+        <div
           v-for="group in groupsInSpace(space.id)"
           :key="group.id"
-          type="button"
+          class="group-pill"
           :class="{ active: selectedGroupId === group.id }"
           draggable="true"
-          @click="selectGroup(group.id, space.id)"
           @dragstart="startGroupDrag(group)"
           @dragend="draggingGroupId = null"
           @dragover.prevent
           @drop.prevent="dropGroup(group)"
         >
-          <span>{{ group.name }}</span>
-          <small>{{ serviceCount(group.id) }}</small>
-          <NButton quaternary circle size="tiny" @click.stop="openGroup(group)"><NIcon :component="Edit" /></NButton>
-        </button>
+          <button type="button" class="group-filter" @click="selectGroup(group.id, space.id)">
+            <span>{{ group.name }}</span>
+            <small>{{ serviceCount(group.id) }}</small>
+          </button>
+          <NButton quaternary circle size="small" class="group-edit" @click.stop="openGroup(group)"><NIcon :component="Edit" /></NButton>
+        </div>
       </div>
     </NCard>
   </section>
   <NCard class="filter-card" size="small">
-    <NSpace>
+    <NSpace class="filter-bar">
       <NSelect v-model:value="selectedSpaceId" :options="filterSpaceOptions" class="filter-select" @update:value="selectedGroupId = ''" />
       <NSelect v-model:value="selectedGroupId" :options="groupOptions" class="filter-select" />
       <NSelect v-model:value="selectedStatus" :options="statusOptions" class="filter-select" />
       <NInput v-model:value="search" clearable placeholder="搜索服务、分组、地址、Docker 名称或镜像" class="filter-search" />
+      <NButton secondary @click="clearFilters">清除筛选</NButton>
     </NSpace>
   </NCard>
   <NDataTable
@@ -455,12 +472,15 @@ onMounted(async () => {
 .space-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .space-head small, .group-chain small { color: var(--sc-muted); }
 .group-chain { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
-.group-chain button { display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%; padding: 0.24rem 0.34rem 0.24rem 0.55rem; border: 1px solid rgb(148 163 184 / 14%); border-radius: 999px; background: rgb(148 163 184 / 7%); color: var(--sc-text); cursor: grab; font-size: 0.75rem; }
-.group-chain button.active { border-color: rgb(52 211 153 / 28%); background: rgb(52 211 153 / 12%); color: var(--sc-success); }
-.group-chain button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-pill { display: inline-flex; align-items: center; gap: 0.15rem; max-width: 100%; padding: 0.12rem 0.16rem 0.12rem 0.52rem; border: 1px solid rgb(148 163 184 / 14%); border-radius: 999px; background: rgb(148 163 184 / 7%); color: var(--sc-text); cursor: grab; font-size: 0.75rem; }
+.group-pill.active { border-color: rgb(52 211 153 / 28%); background: rgb(52 211 153 / 12%); color: var(--sc-success); }
+.group-filter { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.group-filter > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-edit { flex: 0 0 auto; }
 .filter-card { margin-bottom: 0.8rem; }
+.filter-bar { width: 100%; }
 .filter-select { width: 12rem; }
-.filter-search { width: min(34rem, 100%); }
+.filter-search { width: min(42rem, 100%); flex: 1 1 24rem; }
 .group-modal { width: min(28rem, calc(100vw - 1.5rem)); }
 @media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } .filter-select, .filter-search { width: 100%; } }
 </style>

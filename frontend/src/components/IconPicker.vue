@@ -9,6 +9,9 @@ const props = defineProps<{
   iconType: string
   iconValue?: string | null
   serviceUrl?: string | null
+  authType?: 'none' | 'basic'
+  authUsername?: string | null
+  authPassword?: string | null
 }>()
 const emit = defineEmits<{
   'update:iconType': [value: string]
@@ -19,6 +22,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const previewFailed = ref(false)
 const faviconOptions = ref<string[]>([])
 const selfhstController = ref<AbortController | null>(null)
+const iconKeyword = ref('')
 const message = useMessage()
 
 const preview = computed(() => {
@@ -36,13 +40,14 @@ watch(preview, () => {
 })
 
 async function suggest() {
-  if (!props.name.trim()) return message.warning('请先填写服务名称')
+  const keyword = (iconKeyword.value || props.name).trim()
+  if (!keyword) return message.warning('请先填写图标关键词')
   selfhstController.value?.abort()
   const controller = new AbortController()
   selfhstController.value = controller
   loading.value = true
   try {
-    const suggestion = await iconsApi.suggest(props.name)
+    const suggestion = await iconsApi.suggest(keyword)
     try {
       const result = await iconsApi.test(suggestion.reference, controller.signal)
       emit('update:iconType', 'upload')
@@ -87,8 +92,19 @@ async function favicon() {
   if (!props.serviceUrl) return message.warning('请先填写服务地址')
   loading.value = true
   try {
-    const result = await iconsApi.favicon(props.serviceUrl)
+    const result = await iconsApi.favicon({
+      url: props.serviceUrl,
+      auth_type: props.authType,
+      auth_username: props.authUsername,
+      auth_password: props.authPassword,
+    })
     faviconOptions.value = result.urls
+    if (result.urls.length === 0) {
+      emit('update:iconType', 'auto')
+      emit('update:iconValue', '')
+      message.warning('未发现 favicon，已清空当前图标')
+      return
+    }
     selectFavicon(result.urls[0])
     message.success(
       result.urls.length > 1 ? `发现 ${result.urls.length} 个 favicon，请选择` : '已发现 favicon',
@@ -126,6 +142,7 @@ function faviconLabel(value: string) {
         placeholder="selfh.st reference 或图标 URL"
         @update:value="emit('update:iconValue', $event)"
       />
+      <NInput v-model:value="iconKeyword" placeholder="图标关键词，例如 MoviePilot、Syncthing" />
       <NSelect
         v-if="faviconOptions.length > 1"
         :value="iconType === 'favicon' ? iconValue : null"
@@ -149,7 +166,13 @@ function faviconLabel(value: string) {
         <NButton size="small" :loading="loading" @click="fileInput?.click()">
           <template #icon><NIcon :component="Upload" /></template>上传图标
         </NButton>
-        <input ref="fileInput" class="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/x-icon" @change="upload" />
+        <input
+          ref="fileInput"
+          class="file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg,image/x-icon"
+          @change="upload"
+        />
       </NSpace>
     </div>
   </div>
