@@ -1,5 +1,7 @@
 PRAGMA foreign_keys = OFF;
 
+DROP TABLE IF EXISTS services_new;
+
 CREATE TABLE services_new (
   id TEXT PRIMARY KEY,
   group_id TEXT NOT NULL,
@@ -22,7 +24,7 @@ CREATE TABLE services_new (
   FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE RESTRICT
 );
 
-INSERT INTO services (
+INSERT INTO services_new (
   id,
   group_id,
   name,
