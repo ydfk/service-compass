@@ -7,6 +7,7 @@ use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 use crate::auth;
 
 pub const UNGROUPED_GROUP_ID: &str = "00000000-0000-0000-0000-000000000000";
+pub const DEFAULT_SPACE_ID: &str = "00000000-0000-0000-0000-000000000001";
 
 pub async fn connect(database_url: &str) -> Result<SqlitePool> {
     ensure_parent(database_url)?;
@@ -23,14 +24,28 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool> {
 async fn ensure_defaults(pool: &SqlitePool) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     sqlx::query(
-        "INSERT OR IGNORE INTO groups (id, name, description, sort_order, created_at, updated_at) \
-         VALUES (?, '未分组', NULL, -1, ?, ?)",
+        "INSERT OR IGNORE INTO spaces (id, name, description, sort_order, created_at, updated_at) \
+         VALUES (?, '默认空间', NULL, 0, ?, ?)",
     )
-    .bind(UNGROUPED_GROUP_ID)
+    .bind(DEFAULT_SPACE_ID)
     .bind(&now)
     .bind(&now)
     .execute(pool)
     .await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO groups (id, space_id, name, description, sort_order, created_at, updated_at) \
+         VALUES (?, ?, '未分组', NULL, -1, ?, ?)",
+    )
+    .bind(UNGROUPED_GROUP_ID)
+    .bind(DEFAULT_SPACE_ID)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    sqlx::query("UPDATE groups SET space_id = ? WHERE space_id IS NULL OR space_id = ''")
+        .bind(DEFAULT_SPACE_ID)
+        .execute(pool)
+        .await?;
 
     let has_admin: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM admin_users WHERE id = 1)")

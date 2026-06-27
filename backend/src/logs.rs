@@ -11,7 +11,7 @@ use serde::Serialize;
 
 const MAX_LOGS: usize = 1_000;
 static LOGS: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
-static FILE_LOGS: OnceLock<FileLogConfig> = OnceLock::new();
+static FILE_LOGS: OnceLock<Mutex<FileLogConfig>> = OnceLock::new();
 static LAST_CLEANUP: OnceLock<Mutex<NaiveDate>> = OnceLock::new();
 
 #[derive(Clone)]
@@ -84,18 +84,33 @@ pub fn recent(limit: usize) -> Vec<LogEntry> {
 pub fn init(log_dir: &Path, retention_days: i64) -> io::Result<()> {
     fs::create_dir_all(log_dir)?;
     cleanup_files(log_dir, retention_days.max(1))?;
-    let _ = FILE_LOGS.set(FileLogConfig {
+    let _ = FILE_LOGS.set(Mutex::new(FileLogConfig {
         dir: log_dir.to_path_buf(),
         retention_days: retention_days.max(1),
-    });
+    }));
     let _ = LAST_CLEANUP.set(Mutex::new(Utc::now().date_naive()));
     Ok(())
+}
+
+pub fn set_retention_days(retention_days: i64) -> io::Result<()> {
+    let Some(config) = FILE_LOGS.get() else {
+        return Ok(());
+    };
+    let mut config = config
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    config.retention_days = retention_days.max(1);
+    cleanup_files(&config.dir, config.retention_days)
 }
 
 fn append_file(line: &str) {
     let Some(config) = FILE_LOGS.get() else {
         return;
     };
+    let config = config
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
     let date = Utc::now().date_naive();
     let path = config
         .dir

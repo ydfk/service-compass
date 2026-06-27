@@ -2,7 +2,7 @@
 import { ArrowsSort, LayoutGrid, ListDetails, Login, Settings } from '@vicons/tabler'
 import { NButton, NButtonGroup, NEmpty, NIcon, NSpin, useMessage } from 'naive-ui'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api/client'
 import { groupsApi } from '../api/groups'
@@ -21,9 +21,11 @@ import type {
   MonitorInput,
   Service,
   ServiceInput,
+  Space,
   UrlMode,
 } from '../types'
 import {
+  cleanServiceInput,
   emptyHttpMonitor,
   emptyService,
   monitorToInput,
@@ -35,7 +37,7 @@ import {
 
 const dashboard = useDashboardStore()
 const auth = useAuthStore()
-const { groups, loading } = storeToRefs(dashboard)
+const { spaces, groups, loading } = storeToRefs(dashboard)
 const mode = ref<UrlMode>((localStorage.getItem('service-compass-url-mode') as UrlMode) || 'public')
 const cardMode = ref<'compact' | 'detail'>(
   (localStorage.getItem('service-compass-card-mode') as 'compact' | 'detail') || 'detail',
@@ -45,6 +47,7 @@ const draggingGroupId = ref<string | null>(null)
 const editorShow = ref(false)
 const editorTitle = ref('添加服务')
 const editorGroups = ref<Group[]>([])
+const editorSpaces = ref<Space[]>([])
 const editorMonitors = ref<Monitor[]>([])
 const editingService = ref<Service | null>(null)
 const serviceForm = ref<ServiceInput>(emptyService())
@@ -62,6 +65,28 @@ const online = computed(
 const visibleGroups = computed(() =>
   groups.value.filter((group) => auth.authenticated || group.services.length),
 )
+const visibleSpaces = computed(() =>
+  spaces.value
+    .map((space) => ({
+      ...space,
+      groups: space.groups.filter((group) => auth.authenticated || group.services.length),
+    }))
+    .filter((space) => auth.authenticated || space.groups.length),
+)
+const activeSpaceId = ref('')
+const activeSpace = computed(
+  () =>
+    visibleSpaces.value.find((space) => space.id === activeSpaceId.value) ?? visibleSpaces.value[0],
+)
+const activeGroups = computed(() => activeSpace.value?.groups ?? visibleGroups.value)
+
+watch(visibleSpaces, (value) => {
+  if (!value.length) {
+    activeSpaceId.value = ''
+    return
+  }
+  if (!value.some((space) => space.id === activeSpaceId.value)) activeSpaceId.value = value[0].id
+})
 
 function setMode(value: UrlMode) {
   mode.value = value
@@ -74,8 +99,9 @@ function setCardMode(value: 'compact' | 'detail') {
 }
 
 async function loadEditorData() {
-  ;[editorGroups.value, editorMonitors.value] = await Promise.all([
+  ;[editorGroups.value, editorSpaces.value, editorMonitors.value] = await Promise.all([
     groupsApi.list(),
+    groupsApi.spaces(),
     monitorsApi.list(),
   ])
 }
@@ -118,7 +144,7 @@ async function openClone(service: Service) {
 async function saveService() {
   if (!serviceForm.value.name.trim()) return
   const input = {
-    ...serviceForm.value,
+    ...cleanServiceInput(serviceForm.value),
     monitor: serviceForm.value.create_monitor ? httpMonitor.value : null,
   }
   if (editingService.value) await servicesApi.update(editingService.value.id, input)
@@ -147,7 +173,7 @@ async function dropGroup(target: DashboardGroup) {
   const sourceId = draggingGroupId.value
   draggingGroupId.value = null
   if (!sourceId || sourceId === target.id || target.id === UNGROUPED_ID) return
-  const ordered = groups.value.filter((group) => group.id !== UNGROUPED_ID)
+  const ordered = activeGroups.value.filter((group) => group.id !== UNGROUPED_ID)
   const sourceIndex = ordered.findIndex((group) => group.id === sourceId)
   const targetIndex = ordered.findIndex((group) => group.id === target.id)
   if (sourceIndex < 0 || targetIndex < 0) return
@@ -193,8 +219,20 @@ onMounted(async () => {
     <main>
       <NSpin :show="loading">
         <NEmpty v-if="!loading && total === 0" description="还没有服务，登录管理端添加第一个服务" />
+        <nav v-if="visibleSpaces.length > 1" class="space-tabs" aria-label="空间切换">
+          <button
+            v-for="space in visibleSpaces"
+            :key="space.id"
+            type="button"
+            :class="{ active: space.id === activeSpaceId }"
+            @click="activeSpaceId = space.id"
+          >
+            <span>{{ space.name }}</span>
+            <small>{{ space.groups.reduce((count, group) => count + group.services.length, 0) }}</small>
+          </button>
+        </nav>
         <div
-          v-for="group in visibleGroups"
+          v-for="group in activeGroups"
           :key="group.id"
           class="group-wrapper"
           :class="{ draggable: sorting && group.id !== UNGROUPED_ID, dragging: draggingGroupId === group.id }"
@@ -223,6 +261,7 @@ onMounted(async () => {
       v-model:form="serviceForm"
       v-model:monitor="httpMonitor"
       :groups="editorGroups"
+      :spaces="editorSpaces"
       :editing="Boolean(editingService)"
       :title="editorTitle"
       @group-created="addEditorGroup"
@@ -240,6 +279,11 @@ onMounted(async () => {
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
 .header-actions a { text-decoration: none; }
 main { padding-top: 0.4rem; }
+.space-tabs { display: inline-flex; max-width: 100%; gap: 0.35rem; margin: 1rem 0 0.4rem; padding: 0.28rem; overflow-x: auto; border: 1px solid rgb(148 163 184 / 12%); border-radius: 999px; background: rgb(15 23 42 / 36%); backdrop-filter: blur(12px); }
+.space-tabs button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; padding: 0.42rem 0.75rem; border: 0; border-radius: 999px; background: transparent; color: var(--sc-muted); cursor: pointer; font-size: 0.82rem; transition: background 160ms ease, color 160ms ease; }
+.space-tabs button:hover { color: var(--sc-text); }
+.space-tabs button.active { background: rgb(96 165 250 / 18%); color: #bfdbfe; box-shadow: inset 0 0 0 1px rgb(147 197 253 / 18%); }
+.space-tabs small { min-width: 1.15rem; padding: 0.05rem 0.36rem; border-radius: 999px; background: rgb(148 163 184 / 14%); color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; text-align: center; }
 .public-footer { margin-top: 3rem; color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; text-align: center; }
 .group-wrapper.draggable { cursor: grab; }
 .group-wrapper.draggable :deep(.group-section > header) { padding-left: 0.6rem; border-left: 2px solid rgb(96 165 250 / 45%); }

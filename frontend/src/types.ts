@@ -1,8 +1,18 @@
 export type Status = 'up' | 'down' | 'warning' | 'unknown'
 export type UrlMode = 'local' | 'public'
 
+export interface Space {
+  id: string
+  name: string
+  description?: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Group {
   id: string
+  space_id: string
   name: string
   description?: string | null
   icon?: string | null
@@ -57,6 +67,10 @@ export interface StatusPoint {
 
 export interface DashboardGroup extends Group {
   services: Service[]
+}
+
+export interface DashboardSpace extends Space {
+  groups: DashboardGroup[]
 }
 
 export interface ServiceInput {

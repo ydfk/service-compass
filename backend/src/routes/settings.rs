@@ -4,14 +4,21 @@ use serde::Deserialize;
 
 use crate::{
     error::{AppError, AppResult},
+    logs,
     state::AppState,
 };
 
 #[derive(Deserialize)]
 struct SettingsInput {
     retention_days: i64,
+    #[serde(default = "default_retention_days")]
+    log_retention_days: i64,
     cert_expiry_warning_days: i64,
     notification_cooldown_sec: i64,
+}
+
+const fn default_retention_days() -> i64 {
+    30
 }
 
 pub fn router() -> Router<AppState> {
@@ -20,10 +27,12 @@ pub fn router() -> Router<AppState> {
 
 async fn get_settings(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
     let retention_days = setting_i64(&state, "retention_days", 30).await?;
+    let log_retention_days = setting_i64(&state, "log_retention_days", 30).await?;
     let cert_expiry_warning_days = setting_i64(&state, "cert_expiry_warning_days", 30).await?;
     let notification_cooldown_sec = setting_i64(&state, "notification_cooldown_sec", 300).await?;
     Ok(Json(serde_json::json!({
         "retention_days": retention_days,
+        "log_retention_days": log_retention_days,
         "cert_expiry_warning_days": cert_expiry_warning_days,
         "notification_cooldown_sec": notification_cooldown_sec
     })))
@@ -38,6 +47,11 @@ async fn update_settings(
             "历史保留天数必须在 1 到 365 之间".into(),
         ));
     }
+    if !(1..=365).contains(&input.log_retention_days) {
+        return Err(AppError::Validation(
+            "系统日志保留天数必须在 1 到 365 之间".into(),
+        ));
+    }
     if !(1..=365).contains(&input.cert_expiry_warning_days) {
         return Err(AppError::Validation(
             "证书到期提醒天数必须在 1 到 365 之间".into(),
@@ -49,6 +63,7 @@ async fn update_settings(
         ));
     }
     save_setting(&state, "retention_days", input.retention_days).await?;
+    save_setting(&state, "log_retention_days", input.log_retention_days).await?;
     save_setting(
         &state,
         "cert_expiry_warning_days",
@@ -62,8 +77,11 @@ async fn update_settings(
     )
     .await?;
     sync_existing_values(&state, &input).await?;
+    logs::set_retention_days(input.log_retention_days)
+        .map_err(|error| AppError::Internal(error.into()))?;
     Ok(Json(serde_json::json!({
         "retention_days": input.retention_days,
+        "log_retention_days": input.log_retention_days,
         "cert_expiry_warning_days": input.cert_expiry_warning_days,
         "notification_cooldown_sec": input.notification_cooldown_sec
     })))
@@ -76,6 +94,11 @@ async fn sync_existing_values(state: &AppState, input: &SettingsInput) -> AppRes
         .await?;
     sqlx::query("UPDATE notification_rules SET cooldown_sec = ?")
         .bind(input.notification_cooldown_sec)
+        .execute(&state.pool)
+        .await?;
+    let cutoff = (Utc::now() - chrono::Duration::days(input.retention_days.max(1))).to_rfc3339();
+    sqlx::query("DELETE FROM monitor_checks WHERE checked_at < ?")
+        .bind(cutoff)
         .execute(&state.pool)
         .await?;
     Ok(())

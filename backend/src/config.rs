@@ -10,7 +10,6 @@ pub struct Config {
     pub secret_file: PathBuf,
     pub static_dir: PathBuf,
     pub log_dir: PathBuf,
-    pub log_retention_days: i64,
     pub production: bool,
 }
 
@@ -43,7 +42,6 @@ impl Config {
                         PathBuf::from("data/logs")
                     }
                 }),
-            log_retention_days: env_i64("SERVICECOMPASS_LOG_RETENTION_DAYS", 30)?,
             production,
         })
     }
@@ -56,13 +54,4 @@ fn env_bool(name: &str, default: bool) -> Result<bool> {
     value
         .parse::<bool>()
         .with_context(|| format!("{name} 必须是 true 或 false"))
-}
-
-fn env_i64(name: &str, default: i64) -> Result<i64> {
-    let Ok(value) = env::var(name) else {
-        return Ok(default);
-    };
-    value
-        .parse::<i64>()
-        .with_context(|| format!("{name} 必须是整数"))
 }

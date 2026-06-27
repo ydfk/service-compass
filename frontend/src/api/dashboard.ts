@@ -1,7 +1,8 @@
-import type { DashboardGroup } from '../types'
+import type { DashboardGroup, DashboardSpace } from '../types'
 import { api } from './client'
 
 export interface DashboardPayload {
+  spaces: DashboardSpace[]
   groups: DashboardGroup[]
 }
 

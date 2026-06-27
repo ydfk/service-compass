@@ -10,18 +10,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::AppResult,
-    models::{group::Group, service::Service},
+    models::{
+        group::{Group, Space},
+        service::Service,
+    },
     state::AppState,
 };
 
 #[derive(Serialize)]
+struct DashboardSpace {
+    #[serde(flatten)]
+    space: Space,
+    groups: Vec<DashboardGroup>,
+}
+
+#[derive(Clone, Serialize)]
 struct DashboardGroup {
     #[serde(flatten)]
     group: Group,
     services: Vec<DashboardService>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct DashboardService {
     #[serde(flatten)]
     service: Service,
@@ -32,7 +42,7 @@ struct DashboardService {
     monitor_tracks: Vec<MonitorTrack>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct MonitorTrack {
     id: String,
     monitor_type: String,
@@ -44,7 +54,7 @@ struct MonitorTrack {
     last_latency_ms: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct TrackSegment {
     status: String,
     checked_at: String,
@@ -90,6 +100,9 @@ pub fn router() -> Router<AppState> {
 }
 
 async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
+    let spaces = sqlx::query_as::<_, Space>("SELECT * FROM spaces ORDER BY sort_order, name")
+        .fetch_all(&state.pool)
+        .await?;
     let groups = sqlx::query_as::<_, Group>("SELECT * FROM groups ORDER BY sort_order, name")
         .fetch_all(&state.pool)
         .await?;
@@ -126,7 +139,20 @@ async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::
             group,
         })
         .collect::<Vec<_>>();
-    Ok(Json(serde_json::json!({ "groups": groups })))
+    let spaces = spaces
+        .into_iter()
+        .map(|space| DashboardSpace {
+            groups: groups
+                .iter()
+                .filter(|group| group.group.space_id == space.id)
+                .cloned()
+                .collect(),
+            space,
+        })
+        .collect::<Vec<_>>();
+    Ok(Json(
+        serde_json::json!({ "spaces": spaces, "groups": groups }),
+    ))
 }
 
 fn dashboard_service(

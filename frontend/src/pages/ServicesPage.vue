@@ -10,6 +10,7 @@ import {
   NInput,
   NInputNumber,
   NModal,
+  NSelect,
   NSpace,
   useDialog,
   useMessage,
@@ -18,12 +19,13 @@ import {
 } from 'naive-ui'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { groupsApi, type GroupInput } from '../api/groups'
+import { groupsApi, type GroupInput, type SpaceInput } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
 import { servicesApi } from '../api/services'
 import ServiceEditorModal from '../components/ServiceEditorModal.vue'
-import type { Group, Monitor, MonitorInput, Service, ServiceInput } from '../types'
+import type { Group, Monitor, MonitorInput, Service, ServiceInput, Space } from '../types'
 import {
+  cleanServiceInput,
   emptyHttpMonitor,
   emptyService,
   monitorToInput,
@@ -31,18 +33,22 @@ import {
   serviceHttpMonitor,
   serviceToInput,
 } from '../utils/serviceForms'
+const spaces = ref<Space[]>([])
 const groups = ref<Group[]>([])
 const services = ref<Service[]>([])
 const monitors = ref<Monitor[]>([])
 const loading = ref(false)
 const groupModal = ref(false)
+const spaceModal = ref(false)
 const serviceModal = ref(false)
+const editingSpace = ref<Space | null>(null)
 const editingGroup = ref<Group | null>(null)
 const editingService = ref<Service | null>(null)
 const serviceEditorTitle = ref('添加服务')
 const draggingGroupId = ref<string | null>(null)
 const search = ref('')
 const groupForm = ref<GroupInput>({ name: '', description: '', sort_order: 0 })
+const spaceForm = ref<SpaceInput>({ name: '', description: '', sort_order: 0 })
 const serviceForm = ref<ServiceInput>(emptyService())
 const httpMonitor = ref<MonitorInput>(emptyHttpMonitor())
 const message = useMessage()
@@ -57,7 +63,7 @@ const filteredServices = computed(() => {
   const keyword = search.value.trim().toLowerCase()
   if (!keyword) return services.value
   return services.value.filter((service) => {
-    const groupName = groups.value.find((item) => item.id === service.group_id)?.name ?? '未分组'
+    const groupName = groupScope(service.group_id)
     return searchableText(
       service.name,
       service.description,
@@ -71,13 +77,16 @@ const filteredServices = computed(() => {
     ).includes(keyword)
   })
 })
+const spaceOptions = computed(() =>
+  spaces.value.map((item) => ({ label: item.name, value: item.id })),
+)
 
 const columns: DataTableColumns<Service> = [
   { title: '服务', key: 'name', render: (row) => h('strong', row.name) },
   {
     title: '分组',
     key: 'group_id',
-    render: (row) => groups.value.find((item) => item.id === row.group_id)?.name ?? '未分组',
+    render: (row) => groupScope(row.group_id),
   },
   {
     title: '外网地址',
@@ -130,10 +139,21 @@ function searchableText(...values: Array<string | null | undefined>) {
   return values.filter(Boolean).join(' ').toLowerCase()
 }
 
+function spaceName(id?: string | null) {
+  return spaces.value.find((item) => item.id === id)?.name ?? '默认空间'
+}
+
+function groupScope(groupId: string) {
+  const group = groups.value.find((item) => item.id === groupId)
+  if (!group) return '默认空间 / 未分组'
+  return `${spaceName(group.space_id)} / ${group.name}`
+}
+
 async function load() {
   loading.value = true
   try {
-    ;[groups.value, services.value, monitors.value] = await Promise.all([
+    ;[spaces.value, groups.value, services.value, monitors.value] = await Promise.all([
+      groupsApi.spaces(),
       groupsApi.list(),
       servicesApi.list(),
       monitorsApi.list(),
@@ -143,16 +163,43 @@ async function load() {
   }
 }
 
+function openSpace(space?: Space) {
+  editingSpace.value = space ?? null
+  spaceForm.value = space
+    ? {
+        name: space.name,
+        description: space.description,
+        sort_order: space.sort_order,
+      }
+    : { name: '', description: '', sort_order: spaces.value.length }
+  spaceModal.value = true
+}
+
+async function saveSpace() {
+  if (!spaceForm.value.name.trim()) return message.warning('请输入空间名称')
+  if (editingSpace.value) await groupsApi.updateSpace(editingSpace.value.id, spaceForm.value)
+  else await groupsApi.createSpace(spaceForm.value)
+  spaceModal.value = false
+  message.success('空间已保存')
+  await load()
+}
+
 function openGroup(group?: Group) {
   editingGroup.value = group ?? null
   groupForm.value = group
     ? {
+        space_id: group.space_id,
         name: group.name,
         description: group.description,
         icon: group.icon,
         sort_order: group.sort_order,
       }
-    : { name: '', description: '', sort_order: groups.value.length }
+    : {
+        space_id: spaces.value[0]?.id ?? null,
+        name: '',
+        description: '',
+        sort_order: groups.value.length,
+      }
   groupModal.value = true
 }
 
@@ -190,7 +237,7 @@ function cloneService(service: Service) {
 async function saveService() {
   if (!serviceForm.value.name.trim()) return message.warning('请填写服务名称')
   const input = {
-    ...serviceForm.value,
+    ...cleanServiceInput(serviceForm.value),
     monitor: serviceForm.value.create_monitor ? httpMonitor.value : null,
   }
   if (editingService.value) await servicesApi.update(editingService.value.id, input)
@@ -248,7 +295,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
+  <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openSpace()">新建空间</NButton><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
+  <section v-if="spaces.length" class="space-strip"><NCard v-for="space in spaces" :key="space.id" size="small"><div><strong>{{ space.name }}</strong><small>{{ groups.filter((item) => item.space_id === space.id).length }} 个分组</small></div><NButton quaternary circle size="small" @click="openSpace(space)"><NIcon :component="Edit" /></NButton></NCard></section>
   <section v-if="groups.length" class="group-strip"><div v-for="group in groups" :key="group.id" class="group-item" :class="{ dragging: draggingGroupId === group.id }" draggable="true" @dragstart="startGroupDrag(group)" @dragend="draggingGroupId = null" @dragover.prevent @drop.prevent="dropGroup(group)"><NCard size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务 · 可拖拽排序</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></div></section>
   <NCard class="filter-card" size="small">
     <NInput v-model:value="search" clearable placeholder="搜索服务、分组、地址、Docker 名称或镜像" />
@@ -261,6 +309,20 @@ onMounted(async () => {
     :pagination="tablePagination"
   />
   <NModal
+    v-model:show="spaceModal"
+    preset="card"
+    :title="editingSpace ? '编辑空间' : '新建空间'"
+    class="group-modal"
+    :mask-closable="false"
+  >
+    <NForm>
+      <NFormItem label="名称"><NInput v-model:value="spaceForm.name" /></NFormItem>
+      <NFormItem label="说明"><NInput v-model:value="spaceForm.description" type="textarea" /></NFormItem>
+      <NFormItem label="排序"><NInputNumber v-model:value="spaceForm.sort_order" /></NFormItem>
+      <NButton type="primary" block @click="saveSpace">保存空间</NButton>
+    </NForm>
+  </NModal>
+  <NModal
     v-model:show="groupModal"
     preset="card"
     :title="editingGroup ? '编辑分组' : '新建分组'"
@@ -268,13 +330,14 @@ onMounted(async () => {
     :mask-closable="false"
   >
     <NForm>
+      <NFormItem label="空间"><NSelect v-model:value="groupForm.space_id" :options="spaceOptions" placeholder="选择所属空间" /></NFormItem>
       <NFormItem label="名称"><NInput v-model:value="groupForm.name" /></NFormItem>
       <NFormItem label="说明"><NInput v-model:value="groupForm.description" type="textarea" /></NFormItem>
       <NFormItem label="排序"><NInputNumber v-model:value="groupForm.sort_order" /></NFormItem>
       <NButton type="primary" block @click="saveGroup">保存分组</NButton>
     </NForm>
   </NModal>
-  <ServiceEditorModal v-model:show="serviceModal" v-model:form="serviceForm" v-model:monitor="httpMonitor" :groups="groups" :editing="Boolean(editingService)" :title="serviceEditorTitle" @group-created="addGroup" @save="saveService" />
+  <ServiceEditorModal v-model:show="serviceModal" v-model:form="serviceForm" v-model:monitor="httpMonitor" :groups="groups" :spaces="spaces" :editing="Boolean(editingService)" :title="serviceEditorTitle" @group-created="addGroup" @save="saveService" />
 </template>
 
 <style scoped>
@@ -282,8 +345,10 @@ onMounted(async () => {
 .page-header p { margin: 0; color: #5da9ff; font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.2em; }
 .page-header h1 { margin: 0.3rem 0; font-size: 2.1rem; }
 .page-header span, .group-strip small { color: #75859b; }
-.group-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
-.group-strip :deep(.n-card__content) { display: flex; align-items: center; justify-content: space-between; }
+.space-strip, .group-strip { display: grid; gap: 0.7rem; margin-bottom: 1rem; }
+.space-strip { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+.group-strip { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+.space-strip :deep(.n-card__content), .group-strip :deep(.n-card__content) { display: flex; align-items: center; justify-content: space-between; }
 .group-item { cursor: grab; transition: opacity 160ms ease, transform 160ms ease; }
 .group-item.dragging { opacity: 0.45; transform: scale(0.98); }
 .group-strip div { display: grid; }

@@ -145,8 +145,8 @@ async fn persist(
         .bind(&input.description)
         .bind(&input.icon_type)
         .bind(&input.icon_value)
-        .bind(&input.local_url)
-        .bind(&input.public_url)
+        .bind(clean_url(input.local_url.as_deref()))
+        .bind(clean_url(input.public_url.as_deref()))
         .bind(&input.preferred_url_mode)
         .bind(&input.docker_endpoint_id)
         .bind(&input.docker_container_id)
@@ -172,8 +172,8 @@ async fn persist(
         .bind(&input.description)
         .bind(&input.icon_type)
         .bind(&input.icon_value)
-        .bind(&input.local_url)
-        .bind(&input.public_url)
+        .bind(clean_url(input.local_url.as_deref()))
+        .bind(clean_url(input.public_url.as_deref()))
         .bind(&input.preferred_url_mode)
         .bind(&input.docker_endpoint_id)
         .bind(&input.docker_container_id)
@@ -197,6 +197,15 @@ fn group_id(input: &ServiceInput) -> &str {
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(UNGROUPED_GROUP_ID)
+}
+
+fn clean_url(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() || matches!(value, "http://" | "https://") {
+        None
+    } else {
+        Some(value.to_owned())
+    }
 }
 
 async fn sync_service_monitors(

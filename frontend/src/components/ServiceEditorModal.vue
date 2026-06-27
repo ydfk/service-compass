@@ -24,13 +24,14 @@ import type {
   MonitorInput,
   NotificationChannel,
   ServiceInput,
+  Space,
   UrlMode,
 } from '../types'
 import DockerEndpointModal from './DockerEndpointModal.vue'
 import IconPicker from './IconPicker.vue'
 import MonitorForm from './MonitorForm.vue'
 
-const props = defineProps<{ groups: Group[]; editing: boolean; title?: string }>()
+const props = defineProps<{ groups: Group[]; spaces: Space[]; editing: boolean; title?: string }>()
 const emit = defineEmits<{ save: []; 'group-created': [group: Group] }>()
 const show = defineModel<boolean>('show', { required: true })
 const form = defineModel<ServiceInput>('form', { required: true })
@@ -42,8 +43,10 @@ const dockerEnabled = ref(false)
 const scanning = ref(false)
 const selectedCandidate = ref<string | null>(null)
 const localGroups = ref<Group[]>([])
+const localSpaces = ref<Space[]>([])
 const addingGroup = ref(false)
 const newGroupName = ref('')
+const newGroupSpaceId = ref('')
 const creatingGroup = ref(false)
 const endpointModal = ref(false)
 const message = useMessage()
@@ -67,8 +70,14 @@ const candidateOptions = computed(() => {
 })
 const groupOptions = computed(() => [
   { label: '未分组', value: '' },
-  ...localGroups.value.map((item) => ({ label: item.name, value: item.id })),
+  ...localGroups.value.map((item) => ({
+    label: `${spaceName(item.space_id)} / ${item.name}`,
+    value: item.id,
+  })),
 ])
+const spaceOptions = computed(() =>
+  localSpaces.value.map((item) => ({ label: item.name, value: item.id })),
+)
 const monitorUrl = computed(() => {
   if (monitor.value.target_url_mode === 'custom') return monitor.value.target_url || ''
   if (monitor.value.target_url_mode === 'local')
@@ -84,6 +93,8 @@ watch(show, async (value) => {
   dockerEnabled.value = Boolean(form.value.docker_endpoint_id)
   selectedCandidate.value = form.value.docker_container_id || null
   localGroups.value = [...props.groups]
+  localSpaces.value = [...props.spaces]
+  newGroupSpaceId.value = localSpaces.value[0]?.id || ''
   addingGroup.value = false
   newGroupName.value = ''
   ;[endpoints.value, notificationChannels.value] = await Promise.all([
@@ -100,9 +111,14 @@ watch(canNotifyCertificate, (value) => {
 async function createGroup() {
   const name = newGroupName.value.trim()
   if (!name) return message.warning('请输入分组名称')
+  if (!newGroupSpaceId.value) return message.warning('请先创建空间')
   creatingGroup.value = true
   try {
-    const group = await groupsApi.create({ name, sort_order: localGroups.value.length })
+    const group = await groupsApi.create({
+      space_id: newGroupSpaceId.value,
+      name,
+      sort_order: localGroups.value.length,
+    })
     localGroups.value.push(group)
     form.value.group_id = group.id
     addingGroup.value = false
@@ -112,6 +128,10 @@ async function createGroup() {
   } finally {
     creatingGroup.value = false
   }
+}
+
+function spaceName(id: string) {
+  return localSpaces.value.find((item) => item.id === id)?.name || '默认空间'
 }
 
 watch(dockerEnabled, (value) => {
@@ -207,6 +227,7 @@ function applyDefaultNotification() {
             <NButton title="新建分组" @click="addingGroup = !addingGroup"><NIcon :component="Plus" /></NButton>
           </div>
           <div v-if="addingGroup" class="inline-create">
+            <NSelect v-model:value="newGroupSpaceId" :options="spaceOptions" placeholder="选择空间" />
             <NInput v-model:value="newGroupName" placeholder="输入新分组名称" @keyup.enter="createGroup" />
             <NButton type="primary" :loading="creatingGroup" @click="createGroup">创建</NButton>
           </div>
@@ -266,7 +287,7 @@ function applyDefaultNotification() {
 .option-card { margin-top: 0.75rem; background: var(--sc-card); }
 .option-title, .footer-row span { display: flex; align-items: center; gap: 0.45rem; }
 .select-with-action, .inline-create { display: flex; width: 100%; gap: 0.5rem; }
-.inline-create { margin-top: 0.5rem; }
+.inline-create { display: grid; grid-template-columns: 10rem 1fr auto; margin-top: 0.5rem; }
 .docker-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem; }
 .candidate-select, .docker-note { grid-column: span 3; }
 .docker-note { color: var(--sc-muted); }
@@ -274,5 +295,5 @@ function applyDefaultNotification() {
 .cert-toggle small { margin-left: 0.2rem; color: var(--sc-subtle); }
 .cert-toggle.disabled { opacity: 0.55; }
 .footer-row { display: flex; align-items: center; justify-content: space-between; margin-top: 1rem; }
-@media (max-width: 620px) { .form-grid, .monitor-row { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
+@media (max-width: 620px) { .form-grid, .monitor-row, .inline-create { grid-template-columns: 1fr; } .span-2 { grid-column: auto; } }
 </style>

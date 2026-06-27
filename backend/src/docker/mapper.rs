@@ -37,12 +37,13 @@ pub fn candidate(
     let local_url = discover_url(&labels).or_else(|| port_url(endpoint, summary));
     let public_url = labels
         .get("homepage.href")
-        .filter(|value| value.starts_with("https://"))
+        .filter(|value| valid_url(value))
         .cloned()
         .or_else(|| {
             endpoint
                 .public_host_hint
                 .as_ref()
+                .filter(|host| !host.trim().is_empty())
                 .map(|host| normalize_host(host))
         });
 
@@ -122,6 +123,7 @@ fn discover_url(labels: &HashMap<String, String>) -> Option<String> {
     labels
         .get("homepage.href")
         .cloned()
+        .filter(|value| valid_url(value))
         .or_else(|| {
             labels.iter().find_map(|(key, value)| {
                 key.starts_with("traefik.http.routers.")
@@ -142,11 +144,18 @@ fn host_from_traefik(rule: &str) -> Option<String> {
 }
 
 fn normalize_host(host: &str) -> String {
+    let host = host.trim();
     if host.starts_with("http://") || host.starts_with("https://") {
         host.to_owned()
     } else {
         format!("https://{host}")
     }
+}
+
+fn valid_url(value: &str) -> bool {
+    let value = value.trim();
+    (value.starts_with("http://") && value.len() > "http://".len())
+        || (value.starts_with("https://") && value.len() > "https://".len())
 }
 
 fn fallback_name(container: &str, image: Option<&str>) -> String {

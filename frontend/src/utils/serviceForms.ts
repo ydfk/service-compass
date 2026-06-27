@@ -137,3 +137,17 @@ export function serviceHttpMonitor(monitors: Monitor[], serviceId: string) {
 export function serviceCertMonitor(monitors: Monitor[], serviceId: string) {
   return monitors.find((item) => item.service_id === serviceId && item.monitor_type === 'cert')
 }
+
+export function cleanServiceInput(input: ServiceInput): ServiceInput {
+  return {
+    ...input,
+    local_url: cleanUrl(input.local_url),
+    public_url: cleanUrl(input.public_url),
+  }
+}
+
+function cleanUrl(value?: string | null) {
+  const trimmed = value?.trim() || ''
+  if (!trimmed || trimmed === 'http://' || trimmed === 'https://') return ''
+  return trimmed
+}

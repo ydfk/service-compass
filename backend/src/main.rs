@@ -8,7 +8,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let config = Arc::new(Config::from_env()?);
-    service_compass_backend::logs::init(&config.log_dir, config.log_retention_days)?;
+    service_compass_backend::logs::init(&config.log_dir, 30)?;
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .with_ansi(false)
@@ -16,6 +16,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let pool = db::connect(&config.database_url).await?;
+    let log_retention_days = sqlx::query_scalar::<_, i64>(
+        "SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'log_retention_days'",
+    )
+    .fetch_optional(&pool)
+    .await?
+    .unwrap_or(30);
+    service_compass_backend::logs::set_retention_days(log_retention_days)?;
     let state = AppState::new(pool, Arc::clone(&config))?;
     service_compass_backend::monitor::scheduler::start(state.clone());
     let router = app(state, &config.static_dir);
