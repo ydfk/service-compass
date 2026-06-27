@@ -2,6 +2,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use chrono::Utc;
+use sha2::{Digest, Sha384};
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
 use crate::auth;
@@ -16,6 +17,7 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool> {
         .create_if_missing(true)
         .foreign_keys(true);
     let pool = SqlitePool::connect_with(options).await?;
+    protect_service_preferred_url_migration(&pool).await?;
     sqlx::migrate!().run(&pool).await?;
     ensure_defaults(&pool).await?;
     Ok(pool)
@@ -90,6 +92,9 @@ pub async fn test_pool() -> SqlitePool {
         .connect_with(options)
         .await
         .expect("无法创建测试数据库");
+    protect_service_preferred_url_migration(&pool)
+        .await
+        .expect("测试数据库预迁移保护失败");
     sqlx::migrate!()
         .run(&pool)
         .await
@@ -98,4 +103,60 @@ pub async fn test_pool() -> SqlitePool {
         .await
         .expect("测试默认数据初始化失败");
     pool
+}
+
+async fn protect_service_preferred_url_migration(pool: &SqlitePool) -> Result<()> {
+    if !table_exists(pool, "services").await?
+        || !table_exists(pool, "_sqlx_migrations").await?
+        || !column_exists(pool, "services", "preferred_url_mode").await?
+        || migration_applied(pool, 11).await?
+    {
+        return Ok(());
+    }
+
+    tracing::warn!(
+        "检测到旧 services.preferred_url_mode 列，使用安全预迁移删除，跳过会重建 services 表的迁移 11"
+    );
+    sqlx::query("ALTER TABLE services DROP COLUMN preferred_url_mode")
+        .execute(pool)
+        .await?;
+    let checksum = Sha384::digest(
+        include_str!("../migrations/0011_remove_service_preferred_url_mode.sql").as_bytes(),
+    )
+    .to_vec();
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+         VALUES (11, 'remove service preferred url mode', TRUE, ?, 0)",
+    )
+    .bind(checksum)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn table_exists(pool: &SqlitePool, table: &str) -> Result<bool> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)",
+    )
+    .bind(table)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists)
+}
+
+async fn column_exists(pool: &SqlitePool, table: &str, column: &str) -> Result<bool> {
+    let rows: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info(?)")
+        .bind(table)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.iter().any(|item| item == column))
+}
+
+async fn migration_applied(pool: &SqlitePool, version: i64) -> Result<bool> {
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _sqlx_migrations WHERE version = ?)")
+            .bind(version)
+            .fetch_one(pool)
+            .await?;
+    Ok(exists)
 }
