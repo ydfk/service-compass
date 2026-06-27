@@ -30,6 +30,7 @@ import type {
 import DockerEndpointModal from './DockerEndpointModal.vue'
 import IconPicker from './IconPicker.vue'
 import MonitorForm from './MonitorForm.vue'
+import { UNGROUPED_ID } from '../utils/serviceForms'
 
 const props = defineProps<{ groups: Group[]; spaces: Space[]; editing: boolean; title?: string }>()
 const emit = defineEmits<{ save: []; 'group-created': [group: Group] }>()
@@ -69,11 +70,13 @@ const candidateOptions = computed(() => {
   return options
 })
 const groupOptions = computed(() => [
-  { label: '未分组', value: '' },
-  ...localGroups.value.map((item) => ({
-    label: `${spaceName(item.space_id)} / ${item.name}`,
-    value: item.id,
-  })),
+  { label: `${spaceName(localSpaces.value[0]?.id || '')} / 未分组`, value: '' },
+  ...localGroups.value
+    .filter((item) => item.id !== UNGROUPED_ID)
+    .map((item) => ({
+      label: `${spaceName(item.space_id)} / ${item.name}`,
+      value: item.id,
+    })),
 ])
 const spaceOptions = computed(() =>
   localSpaces.value.map((item) => ({ label: item.name, value: item.id })),
@@ -221,7 +224,7 @@ function applyDefaultNotification() {
         <NFormItem label="服务名称" class="span-2"><NInput v-model:value="form.name" placeholder="例如：Home Assistant" /></NFormItem>
         <NFormItem label="外网地址（可选）"><NInput v-model:value="form.public_url" placeholder="https://service.example.com" /></NFormItem>
         <NFormItem label="内网地址（可选）"><NInput v-model:value="form.local_url" placeholder="http://192.168.1.10:8080" /></NFormItem>
-        <NFormItem label="分组（可选）">
+        <NFormItem label="空间 / 分组（可选）">
           <div class="select-with-action">
             <NSelect v-model:value="form.group_id" :options="groupOptions" placeholder="选择分组或保持未分组" />
             <NButton title="新建分组" @click="addingGroup = !addingGroup"><NIcon :component="Plus" /></NButton>

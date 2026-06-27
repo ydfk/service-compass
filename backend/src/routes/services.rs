@@ -232,7 +232,10 @@ async fn sync_service_monitors(
         input.cert_expiry_notify,
     )
     .await?;
-    let docker_enabled = input.docker_endpoint_id.is_some() && input.docker_container_id.is_some();
+    let docker_enabled = input.docker_endpoint_id.is_some()
+        && (input.docker_container_id.is_some()
+            || input.docker_name.is_some()
+            || (input.docker_compose_project.is_some() && input.docker_compose_service.is_some()));
     monitors::sync_docker_for_service(state, service_id, input.name.trim(), docker_enabled).await?;
     Ok(())
 }

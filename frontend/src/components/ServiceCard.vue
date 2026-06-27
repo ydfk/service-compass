@@ -116,6 +116,7 @@ function trackPoints(track: MonitorTrack): StatusPoint[] {
 .service-icon img { width: 72%; height: 72%; object-fit: contain; }
 .identity { min-width: 0; }
 h3 { margin: 0; overflow: hidden; font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; }
+.compact h3 { font-size: 0.88rem; }
 .detail h3 { font-size: 1.05rem; }
 .identity p { margin: 0.28rem 0 0; overflow: hidden; color: var(--sc-muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-tracks { display: grid; grid-column: 1 / -1; gap: 0.75rem; margin-top: 0.45rem; }

@@ -47,6 +47,8 @@ const editingService = ref<Service | null>(null)
 const serviceEditorTitle = ref('添加服务')
 const draggingGroupId = ref<string | null>(null)
 const search = ref('')
+const selectedSpaceId = ref('')
+const selectedGroupId = ref('')
 const groupForm = ref<GroupInput>({ name: '', description: '', sort_order: 0 })
 const spaceForm = ref<SpaceInput>({ name: '', description: '', sort_order: 0 })
 const serviceForm = ref<ServiceInput>(emptyService())
@@ -61,8 +63,10 @@ const tablePagination = reactive<PaginationProps>({
 })
 const filteredServices = computed(() => {
   const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return services.value
   return services.value.filter((service) => {
+    if (selectedGroupId.value && service.group_id !== selectedGroupId.value) return false
+    if (selectedSpaceId.value && serviceSpaceId(service) !== selectedSpaceId.value) return false
+    if (!keyword) return true
     const groupName = groupScope(service.group_id)
     return searchableText(
       service.name,
@@ -77,14 +81,30 @@ const filteredServices = computed(() => {
     ).includes(keyword)
   })
 })
+const scopedGroups = computed(() =>
+  selectedSpaceId.value
+    ? groups.value.filter((group) => group.space_id === selectedSpaceId.value)
+    : groups.value,
+)
+const filterSpaceOptions = computed(() => [
+  { label: '全部空间', value: '' },
+  ...spaces.value.map((item) => ({ label: item.name, value: item.id })),
+])
 const spaceOptions = computed(() =>
   spaces.value.map((item) => ({ label: item.name, value: item.id })),
 )
+const groupOptions = computed(() => [
+  { label: '全部分组', value: '' },
+  ...scopedGroups.value.map((item) => ({
+    label: `${spaceName(item.space_id)} / ${item.name}`,
+    value: item.id,
+  })),
+])
 
 const columns: DataTableColumns<Service> = [
   { title: '服务', key: 'name', render: (row) => h('strong', row.name) },
   {
-    title: '分组',
+    title: '空间 / 分组',
     key: 'group_id',
     render: (row) => groupScope(row.group_id),
   },
@@ -147,6 +167,34 @@ function groupScope(groupId: string) {
   const group = groups.value.find((item) => item.id === groupId)
   if (!group) return '默认空间 / 未分组'
   return `${spaceName(group.space_id)} / ${group.name}`
+}
+
+function serviceSpaceId(service: Service) {
+  return (
+    groups.value.find((group) => group.id === service.group_id)?.space_id || spaces.value[0]?.id
+  )
+}
+
+function groupsInSpace(spaceId: string) {
+  return groups.value.filter((group) => group.space_id === spaceId)
+}
+
+function serviceCount(groupId: string) {
+  return services.value.filter((service) => service.group_id === groupId).length
+}
+
+function spaceServiceCount(spaceId: string) {
+  return groupsInSpace(spaceId).reduce((count, group) => count + serviceCount(group.id), 0)
+}
+
+function selectSpace(spaceId: string) {
+  selectedSpaceId.value = selectedSpaceId.value === spaceId ? '' : spaceId
+  selectedGroupId.value = ''
+}
+
+function selectGroup(groupId: string, spaceId: string) {
+  selectedSpaceId.value = spaceId
+  selectedGroupId.value = selectedGroupId.value === groupId ? '' : groupId
 }
 
 async function load() {
@@ -296,10 +344,44 @@ onMounted(async () => {
 
 <template>
   <header class="page-header"><div><p>SERVICE CATALOG</p><h1>服务</h1><span>服务是核心；Docker 关联和监控均可选。</span></div><NSpace><NButton @click="openSpace()">新建空间</NButton><NButton @click="openGroup()">新建分组</NButton><NButton type="primary" @click="openService()"><template #icon><NIcon :component="Plus" /></template>添加服务</NButton></NSpace></header>
-  <section v-if="spaces.length" class="space-strip"><NCard v-for="space in spaces" :key="space.id" size="small"><div><strong>{{ space.name }}</strong><small>{{ groups.filter((item) => item.space_id === space.id).length }} 个分组</small></div><NButton quaternary circle size="small" @click="openSpace(space)"><NIcon :component="Edit" /></NButton></NCard></section>
-  <section v-if="groups.length" class="group-strip"><div v-for="group in groups" :key="group.id" class="group-item" :class="{ dragging: draggingGroupId === group.id }" draggable="true" @dragstart="startGroupDrag(group)" @dragend="draggingGroupId = null" @dragover.prevent @drop.prevent="dropGroup(group)"><NCard size="small"><div><strong>{{ group.name }}</strong><small>{{ services.filter((item) => item.group_id === group.id).length }} 个服务 · 可拖拽排序</small></div><NButton quaternary circle size="small" @click="openGroup(group)"><NIcon :component="Edit" /></NButton></NCard></div></section>
+  <section v-if="spaces.length" class="relation-board">
+    <NCard
+      v-for="space in spaces"
+      :key="space.id"
+      size="small"
+      class="space-card"
+      :class="{ active: selectedSpaceId === space.id && !selectedGroupId }"
+    >
+      <div class="space-head" @click="selectSpace(space.id)">
+        <div><strong>{{ space.name }}</strong><small>{{ groupsInSpace(space.id).length }} 分组 · {{ spaceServiceCount(space.id) }} 服务</small></div>
+        <NButton quaternary circle size="small" @click.stop="openSpace(space)"><NIcon :component="Edit" /></NButton>
+      </div>
+      <div class="group-chain">
+        <button
+          v-for="group in groupsInSpace(space.id)"
+          :key="group.id"
+          type="button"
+          :class="{ active: selectedGroupId === group.id }"
+          draggable="true"
+          @click="selectGroup(group.id, space.id)"
+          @dragstart="startGroupDrag(group)"
+          @dragend="draggingGroupId = null"
+          @dragover.prevent
+          @drop.prevent="dropGroup(group)"
+        >
+          <span>{{ group.name }}</span>
+          <small>{{ serviceCount(group.id) }}</small>
+          <NButton quaternary circle size="tiny" @click.stop="openGroup(group)"><NIcon :component="Edit" /></NButton>
+        </button>
+      </div>
+    </NCard>
+  </section>
   <NCard class="filter-card" size="small">
-    <NInput v-model:value="search" clearable placeholder="搜索服务、分组、地址、Docker 名称或镜像" />
+    <NSpace>
+      <NSelect v-model:value="selectedSpaceId" :options="filterSpaceOptions" class="filter-select" @update:value="selectedGroupId = ''" />
+      <NSelect v-model:value="selectedGroupId" :options="groupOptions" class="filter-select" />
+      <NInput v-model:value="search" clearable placeholder="搜索服务、分组、地址、Docker 名称或镜像" class="filter-search" />
+    </NSpace>
   </NCard>
   <NDataTable
     :columns="columns"
@@ -344,15 +426,21 @@ onMounted(async () => {
 .page-header { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1.5rem; }
 .page-header p { margin: 0; color: #5da9ff; font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.2em; }
 .page-header h1 { margin: 0.3rem 0; font-size: 2.1rem; }
-.page-header span, .group-strip small { color: #75859b; }
-.space-strip, .group-strip { display: grid; gap: 0.7rem; margin-bottom: 1rem; }
-.space-strip { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
-.group-strip { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
-.space-strip :deep(.n-card__content), .group-strip :deep(.n-card__content) { display: flex; align-items: center; justify-content: space-between; }
-.group-item { cursor: grab; transition: opacity 160ms ease, transform 160ms ease; }
-.group-item.dragging { opacity: 0.45; transform: scale(0.98); }
-.group-strip div { display: grid; }
+.page-header span { color: #75859b; }
+.relation-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.space-card { border-color: rgb(148 163 184 / 16%); background: color-mix(in srgb, var(--sc-card) 92%, transparent); transition: border-color 160ms ease, background 160ms ease; }
+.space-card.active { border-color: rgb(96 165 250 / 42%); background: rgb(96 165 250 / 8%); }
+.space-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; cursor: pointer; }
+.space-head > div { display: grid; gap: 0.15rem; min-width: 0; }
+.space-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.space-head small, .group-chain small { color: var(--sc-muted); }
+.group-chain { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+.group-chain button { display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%; padding: 0.24rem 0.34rem 0.24rem 0.55rem; border: 1px solid rgb(148 163 184 / 14%); border-radius: 999px; background: rgb(148 163 184 / 7%); color: var(--sc-text); cursor: grab; font-size: 0.75rem; }
+.group-chain button.active { border-color: rgb(52 211 153 / 28%); background: rgb(52 211 153 / 12%); color: var(--sc-success); }
+.group-chain button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filter-card { margin-bottom: 0.8rem; }
+.filter-select { width: 12rem; }
+.filter-search { width: min(26rem, 100%); }
 .group-modal { width: min(28rem, calc(100vw - 1.5rem)); }
-@media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } .filter-select, .filter-search { width: 100%; } }
 </style>

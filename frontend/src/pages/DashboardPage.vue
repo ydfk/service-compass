@@ -187,6 +187,17 @@ function addEditorGroup(group: Group) {
   if (!editorGroups.value.some((item) => item.id === group.id)) editorGroups.value.push(group)
 }
 
+function spaceTotal(space: { groups: DashboardGroup[] }) {
+  return space.groups.reduce((count, group) => count + group.services.length, 0)
+}
+
+function spaceOnline(space: { groups: DashboardGroup[] }) {
+  return space.groups.reduce(
+    (count, group) => count + group.services.filter((service) => service.status === 'up').length,
+    0,
+  )
+}
+
 async function loadVersion() {
   try {
     const health = await api<{ version: string }>('/api/health')
@@ -228,7 +239,7 @@ onMounted(async () => {
             @click="activeSpaceId = space.id"
           >
             <span>{{ space.name }}</span>
-            <small>{{ space.groups.reduce((count, group) => count + group.services.length, 0) }}</small>
+            <small>{{ spaceOnline(space) }} / {{ spaceTotal(space) }}</small>
           </button>
         </nav>
         <div
@@ -283,7 +294,7 @@ main { padding-top: 0.4rem; }
 .space-tabs button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; padding: 0.42rem 0.75rem; border: 0; border-radius: 999px; background: transparent; color: var(--sc-muted); cursor: pointer; font-size: 0.82rem; transition: background 160ms ease, color 160ms ease; }
 .space-tabs button:hover { color: var(--sc-text); }
 .space-tabs button.active { background: rgb(96 165 250 / 18%); color: #bfdbfe; box-shadow: inset 0 0 0 1px rgb(147 197 253 / 18%); }
-.space-tabs small { min-width: 1.15rem; padding: 0.05rem 0.36rem; border-radius: 999px; background: rgb(148 163 184 / 14%); color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; text-align: center; }
+.space-tabs small { min-width: 2.6rem; padding: 0.05rem 0.38rem; border-radius: 999px; background: rgb(148 163 184 / 14%); color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; text-align: center; }
 .public-footer { margin-top: 3rem; color: var(--sc-subtle); font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; text-align: center; }
 .group-wrapper.draggable { cursor: grab; }
 .group-wrapper.draggable :deep(.group-section > header) { padding-left: 0.6rem; border-left: 2px solid rgb(96 165 250 / 45%); }
