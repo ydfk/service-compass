@@ -5,6 +5,7 @@ export interface SettingsPayload {
   log_retention_days: number
   cert_expiry_warning_days: number
   notification_cooldown_sec: number
+  dashboard_refresh_interval_sec: number
 }
 
 export const settingsApi = {

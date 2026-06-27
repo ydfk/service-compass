@@ -90,7 +90,7 @@ export interface ServiceInput {
   docker_compose_service?: string | null
   create_monitor: boolean
   cert_expiry_notify: boolean
-  monitor_type?: 'http'
+  monitor_type?: 'http' | 'http_keyword'
   monitor_target_url_mode?: 'local' | 'public'
   monitor?: MonitorInput | null
 }
@@ -165,6 +165,11 @@ export interface MonitorCheck {
   error_message?: string | null
   checked_at: string
   extra_json?: string | null
+}
+
+export interface MonitorNotificationInput {
+  notify_enabled: boolean
+  notification_channel_ids: string[]
 }
 
 export interface DockerEndpoint {

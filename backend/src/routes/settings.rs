@@ -15,9 +15,15 @@ struct SettingsInput {
     log_retention_days: i64,
     cert_expiry_warning_days: i64,
     notification_cooldown_sec: i64,
+    #[serde(default = "default_dashboard_refresh_interval")]
+    dashboard_refresh_interval_sec: i64,
 }
 
 const fn default_retention_days() -> i64 {
+    30
+}
+
+const fn default_dashboard_refresh_interval() -> i64 {
     30
 }
 
@@ -30,11 +36,14 @@ async fn get_settings(State(state): State<AppState>) -> AppResult<Json<serde_jso
     let log_retention_days = setting_i64(&state, "log_retention_days", 30).await?;
     let cert_expiry_warning_days = setting_i64(&state, "cert_expiry_warning_days", 30).await?;
     let notification_cooldown_sec = setting_i64(&state, "notification_cooldown_sec", 300).await?;
+    let dashboard_refresh_interval_sec =
+        setting_i64(&state, "dashboard_refresh_interval_sec", 30).await?;
     Ok(Json(serde_json::json!({
         "retention_days": retention_days,
         "log_retention_days": log_retention_days,
         "cert_expiry_warning_days": cert_expiry_warning_days,
-        "notification_cooldown_sec": notification_cooldown_sec
+        "notification_cooldown_sec": notification_cooldown_sec,
+        "dashboard_refresh_interval_sec": dashboard_refresh_interval_sec
     })))
 }
 
@@ -62,6 +71,11 @@ async fn update_settings(
             "通知冷却时间必须在 0 到 86400 秒之间".into(),
         ));
     }
+    if !(5..=3600).contains(&input.dashboard_refresh_interval_sec) {
+        return Err(AppError::Validation(
+            "首页刷新间隔必须在 5 到 3600 秒之间".into(),
+        ));
+    }
     save_setting(&state, "retention_days", input.retention_days).await?;
     save_setting(&state, "log_retention_days", input.log_retention_days).await?;
     save_setting(
@@ -76,6 +90,12 @@ async fn update_settings(
         input.notification_cooldown_sec,
     )
     .await?;
+    save_setting(
+        &state,
+        "dashboard_refresh_interval_sec",
+        input.dashboard_refresh_interval_sec,
+    )
+    .await?;
     sync_existing_values(&state, &input).await?;
     logs::set_retention_days(input.log_retention_days)
         .map_err(|error| AppError::Internal(error.into()))?;
@@ -83,7 +103,8 @@ async fn update_settings(
         "retention_days": input.retention_days,
         "log_retention_days": input.log_retention_days,
         "cert_expiry_warning_days": input.cert_expiry_warning_days,
-        "notification_cooldown_sec": input.notification_cooldown_sec
+        "notification_cooldown_sec": input.notification_cooldown_sec,
+        "dashboard_refresh_interval_sec": input.dashboard_refresh_interval_sec
     })))
 }
 

@@ -6,6 +6,7 @@ pub mod docker;
 pub mod error;
 pub mod icon;
 pub mod logs;
+pub mod maintenance;
 pub mod models;
 pub mod monitor;
 pub mod notify;

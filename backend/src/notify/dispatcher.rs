@@ -62,6 +62,8 @@ pub async fn dispatch(
         monitor_name: monitor.name.clone(),
         check_label: check_label(monitor).into(),
         service_name: service.as_ref().map(|item| item.0.clone()),
+        space_name: service.as_ref().and_then(|item| item.1.clone()),
+        group_name: service.as_ref().and_then(|item| item.2.clone()),
         status: result.status.clone(),
         message: result
             .error_message
@@ -263,14 +265,21 @@ async fn record_delivery(
     .await;
 }
 
-async fn load_service(state: &AppState, monitor: &MonitorRow) -> Option<(String,)> {
+async fn load_service(
+    state: &AppState,
+    monitor: &MonitorRow,
+) -> Option<(String, Option<String>, Option<String>)> {
     let id = monitor.service_id.as_deref()?;
-    sqlx::query_as("SELECT name FROM services WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await
-        .ok()
-        .flatten()
+    sqlx::query_as(
+        "SELECT s.name, sp.name, g.name FROM services s \
+         LEFT JOIN groups g ON g.id = s.group_id \
+         LEFT JOIN spaces sp ON sp.id = g.space_id WHERE s.id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await
+    .ok()
+    .flatten()
 }
 
 fn channel_allows_service(config: &serde_json::Value, service_id: Option<&str>) -> bool {

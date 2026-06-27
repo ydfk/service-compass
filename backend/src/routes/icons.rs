@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use axum::{
     Json, Router,
     body::Body,
@@ -9,11 +7,10 @@ use axum::{
     routing::{get, post},
 };
 use serde::Deserialize;
-use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
-    icon::{favicon, selfhst},
+    icon::{favicon, local, selfhst},
     state::AppState,
 };
 
@@ -62,48 +59,14 @@ async fn test(
         .map_err(anyhow::Error::from)?;
     for url in selfhst::urls(&query.reference) {
         tracing::info!(reference = %query.reference, url, "测试 selfh.st 图标地址");
-        if let Some(local_url) = download_selfhst_icon(&state, &client, &url).await? {
+        if let Some(local_url) =
+            local::download_remote_icon(&client, &state.config, &url, "selfhst").await?
+        {
             tracing::info!(reference = %query.reference, local_url, "selfh.st 图标已下载到本地");
             return Ok(Json(serde_json::json!({ "ok": true, "url": local_url })));
         }
     }
     Err(AppError::NotFound)
-}
-
-async fn download_selfhst_icon(
-    state: &AppState,
-    client: &reqwest::Client,
-    url: &str,
-) -> AppResult<Option<String>> {
-    let response = match client.get(url).send().await {
-        Ok(response) if response.status().is_success() => response,
-        Ok(_) | Err(_) => return Ok(None),
-    };
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(';').next())
-        .unwrap_or_default()
-        .to_string();
-    let extension = image_extension(&content_type)
-        .or_else(|| extension_from_url(url))
-        .ok_or_else(|| AppError::Validation("selfh.st 图标格式不支持".into()))?;
-    let bytes = response.bytes().await.map_err(anyhow::Error::from)?;
-    if bytes.is_empty() || bytes.len() > 2 * 1024 * 1024 {
-        return Err(AppError::Validation(
-            "selfh.st 图标大小必须在 2 MB 以内".into(),
-        ));
-    }
-    let directory = icon_directory(state);
-    tokio::fs::create_dir_all(&directory)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let filename = format!("selfhst-{}.{}", Uuid::new_v4(), extension);
-    tokio::fs::write(directory.join(&filename), bytes)
-        .await
-        .map_err(anyhow::Error::from)?;
-    Ok(Some(format!("/api/icons/custom/{filename}")))
 }
 
 async fn discover_favicon(Json(input): Json<FaviconInput>) -> AppResult<Json<serde_json::Value>> {
@@ -149,24 +112,14 @@ async fn upload(
             continue;
         }
         let content_type = field.content_type().unwrap_or_default().to_string();
-        let extension = image_extension(&content_type).ok_or_else(|| {
+        let extension = local::image_extension(&content_type).ok_or_else(|| {
             AppError::Validation("仅支持 PNG、JPEG、WebP、SVG 或 ICO 图标".into())
         })?;
         let bytes = field.bytes().await.map_err(anyhow::Error::from)?;
-        if bytes.is_empty() || bytes.len() > 2 * 1024 * 1024 {
-            return Err(AppError::Validation("图标大小必须在 2 MB 以内".into()));
-        }
-        let filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
-        let directory = icon_directory(&state);
-        tokio::fs::create_dir_all(&directory)
-            .await
-            .map_err(anyhow::Error::from)?;
-        tokio::fs::write(directory.join(&filename), bytes)
-            .await
-            .map_err(anyhow::Error::from)?;
-        tracing::info!(filename, content_type, "自定义服务图标上传完成");
+        let url = local::save_custom_icon_bytes(&state.config, "upload", extension, bytes).await?;
+        tracing::info!(url, content_type, "自定义服务图标上传完成");
         return Ok(Json(serde_json::json!({
-            "url": format!("/api/icons/custom/{filename}")
+            "url": url
         })));
     }
     Err(AppError::Validation("请选择图标文件".into()))
@@ -179,7 +132,7 @@ async fn custom_icon(
     if filename.contains(['/', '\\']) || filename.contains("..") {
         return Err(AppError::NotFound);
     }
-    let path = icon_directory(&state).join(&filename);
+    let path = local::icon_directory(&state.config).join(&filename);
     let bytes = tokio::fs::read(&path).await.map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             AppError::NotFound
@@ -201,36 +154,4 @@ async fn custom_icon(
         Body::from(bytes),
     )
         .into_response())
-}
-
-fn icon_directory(state: &AppState) -> PathBuf {
-    state
-        .config
-        .secret_file
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("data"))
-        .join("icons")
-}
-
-fn image_extension(content_type: &str) -> Option<&'static str> {
-    match content_type {
-        "image/png" => Some("png"),
-        "image/jpeg" => Some("jpg"),
-        "image/webp" => Some("webp"),
-        "image/svg+xml" => Some("svg"),
-        "image/x-icon" | "image/vnd.microsoft.icon" => Some("ico"),
-        _ => None,
-    }
-}
-
-fn extension_from_url(url: &str) -> Option<&'static str> {
-    if url.ends_with(".svg") {
-        Some("svg")
-    } else if url.ends_with(".png") {
-        Some("png")
-    } else if url.ends_with(".webp") {
-        Some("webp")
-    } else {
-        None
-    }
 }

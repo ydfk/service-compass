@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use service_compass_backend::{app, config::Config, db, state::AppState};
+use service_compass_backend::{app, config::Config, db, maintenance, state::AppState};
 use tokio::signal;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -15,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(service_compass_backend::logs::LogWriterFactory)
         .init();
 
+    maintenance::restore::apply_pending_restore(&config)?;
     let pool = db::connect(&config.database_url).await?;
     let log_retention_days = sqlx::query_scalar::<_, i64>(
         "SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'log_retention_days'",
@@ -25,6 +26,7 @@ async fn main() -> anyhow::Result<()> {
     service_compass_backend::logs::set_retention_days(log_retention_days)?;
     let state = AppState::new(pool, Arc::clone(&config))?;
     service_compass_backend::monitor::scheduler::start(state.clone());
+    maintenance::backup::start_scheduler(state.clone());
     let router = app(state, &config.static_dir);
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
 

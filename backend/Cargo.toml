@@ -11,13 +11,11 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 aes-gcm = "0.10"
-async-stream = "0.3"
 argon2 = "0.5"
 axum = { version = "0.8", features = ["multipart"] }
 base64 = "0.22"
 bollard = { version = "0.21", features = ["ssl"] }
 chrono = { version = "0.4", features = ["serde"] }
-futures-core = "0.3"
 http = "1"
 hickory-resolver = "0.26"
 rand = "0.9"
@@ -38,6 +36,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 webpki-roots = "1"
 x509-parser = "0.18"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

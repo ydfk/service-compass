@@ -27,9 +27,8 @@ const message = useMessage()
 
 const preview = computed(() => {
   if (!props.iconValue) return null
-  return props.iconType === 'selfhst'
-    ? `https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${props.iconValue}.svg`
-    : props.iconValue
+  if (props.iconType === 'selfhst') return null
+  return props.iconValue
 })
 const faviconSelectOptions = computed(() =>
   faviconOptions.value.map((url) => ({ label: faviconLabel(url), value: url })),

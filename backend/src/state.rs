@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use sqlx::SqlitePool;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::RwLock;
 
 use crate::{config::Config, crypto::SecretBox};
 
@@ -11,7 +11,6 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub sessions: Arc<RwLock<HashSet<String>>>,
     pub secrets: Arc<SecretBox>,
-    pub dashboard_events: broadcast::Sender<String>,
 }
 
 impl AppState {
@@ -23,7 +22,6 @@ impl AppState {
             config,
             sessions: Arc::new(RwLock::new(HashSet::new())),
             secrets,
-            dashboard_events: broadcast::channel(64).0,
         })
     }
 }

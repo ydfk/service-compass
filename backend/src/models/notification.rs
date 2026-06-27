@@ -76,6 +76,8 @@ pub struct NotificationEvent {
     pub monitor_name: String,
     pub check_label: String,
     pub service_name: Option<String>,
+    pub space_name: Option<String>,
+    pub group_name: Option<String>,
     pub status: String,
     pub message: String,
     pub target: Option<String>,

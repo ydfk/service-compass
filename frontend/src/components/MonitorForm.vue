@@ -85,7 +85,11 @@ const ignoreTlsErrors = computed({
       <NInput v-model:value="model.target_url" placeholder="https://service.example.com/health" />
     </NFormItem>
     <NFormItem v-if="model.monitor_type === 'http_keyword'" label="响应关键字">
-      <NInput v-model:value="model.keyword" placeholder="healthy" />
+      <NInput
+        v-model:value="model.keyword"
+        placeholder="healthy"
+      />
+      <template #feedback>在纯 HTML 或 JSON 响应中搜索关键字，区分大小写</template>
     </NFormItem>
     <NFormItem v-if="['dns', 'cert'].includes(model.monitor_type)" label="域名">
       <NInput v-model:value="model.domain" placeholder="example.com" />

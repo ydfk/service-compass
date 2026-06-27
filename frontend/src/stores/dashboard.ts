@@ -7,47 +7,41 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const spaces = shallowRef<DashboardSpace[]>([])
   const groups = shallowRef<DashboardGroup[]>([])
   const loading = shallowRef(false)
-  let eventSource: EventSource | null = null
-  let fallbackTimer: number | null = null
+  const refreshIntervalSec = shallowRef(30)
+  let refreshTimer: number | null = null
 
-  async function load() {
-    loading.value = true
+  async function load(options: { silent?: boolean } = {}) {
+    if (!options.silent) loading.value = true
     try {
       const payload = await dashboardApi.get()
       spaces.value = payload.spaces
       groups.value = payload.groups
+      const nextInterval = Math.max(5, Math.min(3600, payload.refresh_interval_sec || 30))
+      const intervalChanged = refreshIntervalSec.value !== nextInterval
+      refreshIntervalSec.value = nextInterval
+      if (refreshTimer != null && intervalChanged) resetTimer()
     } finally {
-      loading.value = false
+      if (!options.silent) loading.value = false
     }
   }
 
   function startAutoRefresh() {
     stopAutoRefresh()
-    if (!('EventSource' in window)) {
-      startFallbackPolling()
-      return
-    }
-    eventSource = new EventSource('/api/dashboard/events')
-    eventSource.onmessage = () => void load()
-    eventSource.addEventListener('dashboard', () => void load())
-    eventSource.onerror = () => {
-      eventSource?.close()
-      eventSource = null
-      startFallbackPolling()
-    }
+    resetTimer()
   }
 
-  function startFallbackPolling() {
-    if (fallbackTimer != null) return
-    fallbackTimer = window.setInterval(() => void load(), 30_000)
+  function resetTimer() {
+    if (refreshTimer != null) window.clearInterval(refreshTimer)
+    refreshTimer = window.setInterval(
+      () => void load({ silent: true }),
+      refreshIntervalSec.value * 1000,
+    )
   }
 
   function stopAutoRefresh() {
-    eventSource?.close()
-    eventSource = null
-    if (fallbackTimer != null) window.clearInterval(fallbackTimer)
-    fallbackTimer = null
+    if (refreshTimer != null) window.clearInterval(refreshTimer)
+    refreshTimer = null
   }
 
-  return { spaces, groups, loading, load, startAutoRefresh, stopAutoRefresh }
+  return { spaces, groups, loading, refreshIntervalSec, load, startAutoRefresh, stopAutoRefresh }
 })

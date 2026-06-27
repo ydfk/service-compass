@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ArrowsSort, LayoutGrid, ListDetails, Login, Settings } from '@vicons/tabler'
-import { NButton, NButtonGroup, NEmpty, NIcon, NSpin, useMessage } from 'naive-ui'
+import { ArrowsSort, LayoutGrid, ListDetails, Login, Search, Settings } from '@vicons/tabler'
+import { NButton, NButtonGroup, NEmpty, NIcon, NInput, NSpin, useMessage } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -53,6 +53,7 @@ const editingService = ref<Service | null>(null)
 const serviceForm = ref<ServiceInput>(emptyService())
 const httpMonitor = ref<MonitorInput>(emptyHttpMonitor())
 const appVersion = ref('')
+const dashboardSearch = ref('')
 const message = useMessage()
 const total = computed(() =>
   groups.value.reduce((count, group) => count + group.services.length, 0),
@@ -62,14 +63,12 @@ const online = computed(
     groups.value.flatMap((group) => group.services).filter((service) => service.status === 'up')
       .length,
 )
-const visibleGroups = computed(() =>
-  groups.value.filter((group) => auth.authenticated || group.services.length),
-)
+const visibleGroups = computed(() => groups.value.map(filterGroup).filter(shouldShowGroup))
 const visibleSpaces = computed(() =>
   spaces.value
     .map((space) => ({
       ...space,
-      groups: space.groups.filter((group) => auth.authenticated || group.services.length),
+      groups: space.groups.map((group) => filterGroup(group, space.name)).filter(shouldShowGroup),
     }))
     .filter((space) => auth.authenticated || space.groups.length),
 )
@@ -143,6 +142,14 @@ async function openClone(service: Service) {
 
 async function saveService() {
   if (!serviceForm.value.name.trim()) return
+  if (
+    serviceForm.value.create_monitor &&
+    httpMonitor.value.monitor_type === 'http_keyword' &&
+    !httpMonitor.value.keyword?.trim()
+  ) {
+    message.warning('HTTP 关键字监控需要填写响应关键字，或切换为普通 HTTP')
+    return
+  }
   const input = {
     ...cleanServiceInput(serviceForm.value),
     monitor: serviceForm.value.create_monitor ? httpMonitor.value : null,
@@ -152,6 +159,46 @@ async function saveService() {
   editorShow.value = false
   message.success(editingService.value ? '服务已更新' : '服务已添加')
   await dashboard.load()
+}
+
+function filterGroup(group: DashboardGroup, spaceName = ''): DashboardGroup {
+  const keyword = dashboardSearch.value.trim().toLowerCase()
+  if (!keyword) return group
+  return {
+    ...group,
+    services: group.services.filter((service) =>
+      matchesService(service, group, spaceName, keyword),
+    ),
+  }
+}
+
+function shouldShowGroup(group: DashboardGroup) {
+  if (dashboardSearch.value.trim()) return group.services.length > 0
+  return auth.authenticated || group.services.length > 0
+}
+
+function matchesService(
+  service: Service,
+  group: DashboardGroup,
+  spaceName: string,
+  keyword: string,
+) {
+  return [
+    service.name,
+    service.description,
+    service.local_url,
+    service.public_url,
+    service.docker_name,
+    service.docker_image,
+    service.docker_compose_project,
+    service.docker_compose_service,
+    group.name,
+    spaceName,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .includes(keyword)
 }
 
 async function moveService(group: DashboardGroup, service: Service, direction: -1 | 1) {
@@ -235,6 +282,15 @@ onUnmounted(() => {
     <main>
       <NSpin :show="loading">
         <NEmpty v-if="!loading && total === 0" description="还没有服务，登录管理端添加第一个服务" />
+        <div class="dashboard-tools">
+          <NInput
+            v-model:value="dashboardSearch"
+            clearable
+            placeholder="搜索服务、说明、地址、Docker、空间或分组"
+          >
+            <template #prefix><NIcon :component="Search" /></template>
+          </NInput>
+        </div>
         <nav v-if="visibleSpaces.length > 1" class="space-tabs" aria-label="空间切换">
           <button
             v-for="space in visibleSpaces"
@@ -295,6 +351,7 @@ onUnmounted(() => {
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
 .header-actions a { text-decoration: none; }
 main { padding-top: 0.4rem; }
+.dashboard-tools { display: flex; width: min(36rem, 100%); margin: 1rem 0 0.2rem; }
 .space-tabs { display: inline-flex; max-width: 100%; gap: 0.35rem; margin: 1rem 0 0.4rem; padding: 0.28rem; overflow-x: auto; border: 1px solid rgb(148 163 184 / 12%); border-radius: 999px; background: rgb(15 23 42 / 36%); backdrop-filter: blur(12px); }
 .space-tabs button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; padding: 0.42rem 0.75rem; border: 0; border-radius: 999px; background: transparent; color: var(--sc-muted); cursor: pointer; font-size: 0.82rem; transition: background 160ms ease, color 160ms ease; }
 .space-tabs button:hover { color: var(--sc-text); }

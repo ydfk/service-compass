@@ -15,7 +15,7 @@ export function emptyService(): ServiceInput {
     sort_order: 0,
     create_monitor: true,
     cert_expiry_notify: false,
-    monitor_type: 'http',
+    monitor_type: 'http_keyword',
     monitor_target_url_mode: 'public',
   }
 }
@@ -24,7 +24,7 @@ export function emptyHttpMonitor(): MonitorInput {
   return {
     service_id: null,
     name: '',
-    monitor_type: 'http',
+    monitor_type: 'http_keyword',
     target_url: '',
     target_url_mode: 'public',
     method: 'GET',
@@ -121,7 +121,7 @@ export function serviceToInput(
     docker_compose_service: service.docker_compose_service,
     create_monitor: Boolean(monitor?.enabled),
     cert_expiry_notify: Boolean(certMonitor?.enabled),
-    monitor_type: 'http',
+    monitor_type: monitor?.monitor_type === 'http_keyword' ? 'http_keyword' : 'http',
     monitor_target_url_mode: monitor?.target_url_mode === 'local' ? 'local' : 'public',
   }
 }

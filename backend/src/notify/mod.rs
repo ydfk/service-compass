@@ -134,16 +134,25 @@ pub fn status_message(event: &NotificationEvent) -> String {
         .unwrap_or_else(|| "—".into());
     let checked_at = format_checked_at(&event.checked_at);
     let detail = detail_text(event);
+    let location = location_line(event);
     let status_code = event
         .status_code
         .map(|value| format!("\n状态码：{value}"))
         .unwrap_or_default();
 
     format!(
-        "{status} · {service} · {check_label}\n{detail}\n\n服务：{service}\n检查项：{check_label}\n监控名称：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}\n\n—— ServiceCompass ——",
+        "{status} · {service} · {check_label}\n{detail}\n\n服务：{service}{location}\n检查项：{check_label}\n监控名称：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}\n\n—— ServiceCompass ——",
         check_label = event.check_label,
         monitor = event.monitor_name
     )
+}
+
+fn location_line(event: &NotificationEvent) -> String {
+    let Some(space) = event.space_name.as_deref() else {
+        return String::new();
+    };
+    let group = event.group_name.as_deref().unwrap_or("未分组");
+    format!("\n位置：{space} / {group}")
 }
 
 fn detail_text(event: &NotificationEvent) -> String {
@@ -180,6 +189,8 @@ mod tests {
             monitor_name: "HTTP".into(),
             check_label: "HTTP".into(),
             service_name: Some("new-api".into()),
+            space_name: Some("Domestic".into()),
+            group_name: Some("home".into()),
             status: "down".into(),
             message: "Request failed with status code 404".into(),
             target: Some("https://example.com".into()),
@@ -193,6 +204,7 @@ mod tests {
             message.starts_with("🔴 Down · new-api · HTTP\nRequest failed with status code 404")
         );
         assert!(message.contains("服务：new-api"));
+        assert!(message.contains("位置：Domestic / home"));
         assert!(message.contains("检查项：HTTP"));
         assert!(message.contains("监控名称：HTTP"));
         assert!(message.contains("状态：🔴 Down"));

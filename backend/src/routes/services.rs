@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     db::UNGROUPED_GROUP_ID,
     error::{AppError, AppResult},
+    icon::local,
     models::{
         group::ReorderItem,
         monitor::MonitorInput,
@@ -47,8 +48,9 @@ async fn get_one(
 
 async fn create(
     State(state): State<AppState>,
-    Json(input): Json<ServiceInput>,
+    Json(mut input): Json<ServiceInput>,
 ) -> AppResult<Json<Service>> {
+    localize_service_icon(&state, &mut input).await;
     validate(&input)?;
     let id = Uuid::new_v4().to_string();
     persist(&state, &id, &input, true).await?;
@@ -60,8 +62,9 @@ async fn create(
 async fn update(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(input): Json<ServiceInput>,
+    Json(mut input): Json<ServiceInput>,
 ) -> AppResult<Json<Service>> {
+    localize_service_icon(&state, &mut input).await;
     validate(&input)?;
     if !persist(&state, &id, &input, false).await? {
         return Err(AppError::NotFound);
@@ -69,6 +72,36 @@ async fn update(
     sync_service_monitors(&state, &id, &input).await?;
     tracing::info!(service_id = %id, name = input.name.trim(), "服务更新完成");
     Ok(Json(find(&state, &id).await?))
+}
+
+async fn localize_service_icon(state: &AppState, input: &mut ServiceInput) {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    else {
+        return;
+    };
+    match local::localize_icon_value(
+        &state.config,
+        &client,
+        &input.icon_type,
+        input.icon_value.as_deref(),
+    )
+    .await
+    {
+        Ok(Some((icon_type, icon_value))) => {
+            input.icon_type = icon_type;
+            input.icon_value = Some(icon_value);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                name = input.name.trim(),
+                "服务图标本地化失败，保留原图标"
+            );
+        }
+    }
 }
 
 async fn remove(

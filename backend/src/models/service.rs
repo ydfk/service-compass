@@ -25,7 +25,7 @@ pub struct Service {
     pub updated_at: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct ServiceInput {
     pub group_id: Option<String>,
     pub name: String,
@@ -65,7 +65,7 @@ const fn default_enabled() -> bool {
 }
 
 fn default_monitor_type() -> String {
-    "http".into()
+    "http_keyword".into()
 }
 
 fn default_monitor_target_mode() -> String {

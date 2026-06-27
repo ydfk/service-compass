@@ -442,7 +442,10 @@ async function saveNotification() {
   notificationForm.value.notify_on_down = true
   notificationForm.value.notify_on_recovery = true
   notificationForm.value.notify_on_warning = true
-  await monitorsApi.update(monitor.id, notificationForm.value)
+  await monitorsApi.updateNotification(monitor.id, {
+    notify_enabled: notificationForm.value.notify_enabled,
+    notification_channel_ids: notificationForm.value.notification_channel_ids,
+  })
   notificationModal.value = false
   message.success('监控通知设置已保存')
   await load()

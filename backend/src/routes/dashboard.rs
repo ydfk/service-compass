@@ -1,9 +1,8 @@
-use std::{collections::HashMap, convert::Infallible};
+use std::collections::HashMap;
 
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    response::sse::{Event, KeepAlive, Sse},
     routing::get,
 };
 use chrono::{Duration, Utc};
@@ -96,25 +95,8 @@ fn default_range() -> String {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/dashboard", get(dashboard))
-        .route("/api/dashboard/events", get(dashboard_events))
         .route("/api/dashboard/summary", get(summary))
         .route("/api/services/{id}/history", get(service_history))
-}
-
-async fn dashboard_events(
-    State(state): State<AppState>,
-) -> Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>> {
-    let mut receiver = state.dashboard_events.subscribe();
-    let stream = async_stream::stream! {
-        loop {
-            match receiver.recv().await {
-                Ok(version) => yield Ok(Event::default().event("dashboard").data(version)),
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    };
-    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
@@ -144,6 +126,7 @@ async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::
     .bind(cutoff)
     .fetch_all(&state.pool)
     .await?;
+    let refresh_interval_sec = setting_i64(&state, "dashboard_refresh_interval_sec", 30).await?;
 
     let groups = groups
         .into_iter()
@@ -168,9 +151,11 @@ async fn dashboard(State(state): State<AppState>) -> AppResult<Json<serde_json::
             space,
         })
         .collect::<Vec<_>>();
-    Ok(Json(
-        serde_json::json!({ "spaces": spaces, "groups": groups }),
-    ))
+    Ok(Json(serde_json::json!({
+        "spaces": spaces,
+        "groups": groups,
+        "refresh_interval_sec": refresh_interval_sec
+    })))
 }
 
 fn dashboard_service(
@@ -191,16 +176,23 @@ fn dashboard_service(
         .map(|item| monitor_track(item, checks))
         .collect();
     DashboardService {
-        icon_url: match service.icon_type.as_str() {
-            "selfhst" => service.icon_value.as_deref().map(crate::icon::selfhst::url),
-            _ => service.icon_value.clone(),
-        },
+        icon_url: service.icon_value.clone(),
         service,
         status,
         last_latency_ms: related.iter().find_map(|item| item.5),
         last_error: related.iter().find_map(|item| item.6.clone()),
         monitor_tracks,
     }
+}
+
+async fn setting_i64(state: &AppState, key: &str, fallback: i64) -> AppResult<i64> {
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(&state.pool)
+        .await?;
+    Ok(value
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(fallback))
 }
 
 fn monitor_track(summary: &MonitorSummary, checks: &[CheckSummary]) -> MonitorTrack {

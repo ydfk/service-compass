@@ -3,6 +3,7 @@ pub mod docker;
 pub mod groups;
 pub mod icons;
 pub mod logs;
+pub mod maintenance;
 pub mod monitors;
 pub mod notifications;
 pub mod services;
@@ -35,6 +36,7 @@ pub fn protected() -> Router<AppState> {
         .merge(groups::router())
         .merge(icons::router())
         .merge(logs::router())
+        .merge(maintenance::router())
         .merge(docker::router())
         .merge(monitors::router())
         .merge(notifications::router())

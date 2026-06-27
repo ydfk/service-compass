@@ -4,6 +4,7 @@ import { api } from './client'
 export interface DashboardPayload {
   spaces: DashboardSpace[]
   groups: DashboardGroup[]
+  refresh_interval_sec: number
 }
 
 export interface DashboardSummary {

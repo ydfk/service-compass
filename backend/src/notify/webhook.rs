@@ -35,6 +35,8 @@ pub async fn send(
         "app": "ServiceCompass",
         "event": event.event_type,
         "service_name": event.service_name,
+        "space_name": event.space_name,
+        "group_name": event.group_name,
         "monitor_name": event.monitor_name,
         "status": event.status,
         "message": event.message,

@@ -1,7 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    routing::{get, post},
+    routing::{get, patch, post},
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -18,6 +18,12 @@ use crate::{
 struct ChecksQuery {
     #[serde(default = "default_limit")]
     limit: i64,
+}
+
+#[derive(Deserialize)]
+pub struct MonitorNotificationInput {
+    notify_enabled: bool,
+    notification_channel_ids: Vec<String>,
 }
 
 const fn default_limit() -> i64 {
@@ -39,8 +45,31 @@ pub fn router() -> Router<AppState> {
             "/api/monitors/{id}",
             get(get_one).put(update).delete(remove),
         )
+        .route(
+            "/api/monitors/{id}/notification",
+            patch(update_notification),
+        )
         .route("/api/monitors/{id}/test", post(test))
         .route("/api/monitors/{id}/checks", get(checks))
+}
+
+async fn update_notification(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<MonitorNotificationInput>,
+) -> AppResult<Json<MonitorView>> {
+    let row = find(&state, &id).await?;
+    save_notification_rules(
+        &state,
+        &id,
+        input.notify_enabled,
+        &input.notification_channel_ids,
+        true,
+        true,
+        true,
+    )
+    .await?;
+    Ok(Json(view_with_state(&state, row).await?))
 }
 
 async fn list(State(state): State<AppState>) -> AppResult<Json<Vec<MonitorView>>> {
@@ -491,16 +520,37 @@ async fn sync_notification_rules(
     monitor_id: &str,
     input: &MonitorInput,
 ) -> AppResult<()> {
+    save_notification_rules(
+        state,
+        monitor_id,
+        input.notify_enabled,
+        &input.notification_channel_ids,
+        input.notify_on_down,
+        input.notify_on_recovery,
+        input.notify_on_warning,
+    )
+    .await
+}
+
+async fn save_notification_rules(
+    state: &AppState,
+    monitor_id: &str,
+    enabled: bool,
+    channel_ids: &[String],
+    notify_on_down: bool,
+    notify_on_recovery: bool,
+    notify_on_warning: bool,
+) -> AppResult<()> {
     sqlx::query("DELETE FROM notification_rules WHERE monitor_id = ?")
         .bind(monitor_id)
         .execute(&state.pool)
         .await?;
-    if !input.notify_enabled || input.notification_channel_ids.is_empty() {
+    if !enabled || channel_ids.is_empty() {
         return Ok(());
     }
     let now = Utc::now().to_rfc3339();
     let cooldown_sec = setting_i64(state, "notification_cooldown_sec", 300).await?;
-    for channel_id in &input.notification_channel_ids {
+    for channel_id in channel_ids {
         sqlx::query(
             "INSERT INTO notification_rules (id, monitor_id, channel_id, notify_on_down, notify_on_recovery, \
              notify_on_warning, cooldown_sec, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
@@ -508,9 +558,9 @@ async fn sync_notification_rules(
         .bind(Uuid::new_v4().to_string())
         .bind(monitor_id)
         .bind(channel_id)
-        .bind(input.notify_on_down)
-        .bind(input.notify_on_recovery)
-        .bind(input.notify_on_warning)
+        .bind(notify_on_down)
+        .bind(notify_on_recovery)
+        .bind(notify_on_warning)
         .bind(cooldown_sec)
         .bind(&now)
         .bind(&now)
