@@ -31,23 +31,24 @@ pub async fn send(
         }
     }
     tracing::info!(url, method = %method, "请求 Webhook 接口");
+    let payload = serde_json::json!({
+        "app": "ServiceCompass",
+        "event": event.event_type,
+        "service_name": event.service_name,
+        "monitor_name": event.monitor_name,
+        "status": event.status,
+        "message": event.message,
+        "formatted_message": status_message(event),
+        "target": event.target,
+        "latency_ms": event.latency_ms,
+        "status_code": event.status_code,
+        "checked_at": event.checked_at
+    });
     let response = client
-        .request(method, url)
+        .request(method.clone(), url)
         .headers(headers)
-        .json(&serde_json::json!({
-            "app": "ServiceCompass",
-            "event": event.event_type,
-            "service_name": event.service_name,
-            "monitor_name": event.monitor_name,
-            "status": event.status,
-            "message": event.message,
-            "formatted_message": status_message(event),
-            "target": event.target,
-            "latency_ms": event.latency_ms,
-            "status_code": event.status_code,
-            "checked_at": event.checked_at
-        }))
+        .json(&payload)
         .send()
         .await?;
-    response_result(response).await
+    response_result(response, method.to_string(), url, payload.to_string()).await
 }

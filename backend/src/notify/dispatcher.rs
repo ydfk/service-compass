@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     models::{monitor::MonitorRow, notification::NotificationEvent},
     monitor::CheckResult,
-    notify,
+    notify::{self, SendResult},
     state::AppState,
 };
 
@@ -76,14 +76,30 @@ pub async fn dispatch(
             .and_then(|value| serde_json::from_str(&value).ok());
         let Some(config) = config else {
             tracing::warn!(channel_id = %target.channel_id, "通知配置解密失败");
+            record_delivery(
+                state,
+                monitor,
+                &target,
+                event_type,
+                None,
+                Some("通知配置解密失败".into()),
+            )
+            .await;
             continue;
         };
         if !channel_allows_service(&config, monitor.service_id.as_deref()) {
             continue;
         }
         match notify::send(&client, &target.channel_type, &config, &event).await {
-            Ok(_) => record_delivery(state, monitor, &target, event_type).await,
-            Err(error) => tracing::warn!(channel_id = %target.channel_id, ?error, "通知发送失败"),
+            Ok(result) => {
+                record_delivery(state, monitor, &target, event_type, Some(result), None).await
+            }
+            Err(error) => {
+                let message = error.to_string();
+                let result = notify::failure_result(&error);
+                tracing::warn!(channel_id = %target.channel_id, ?error, "通知发送失败");
+                record_delivery(state, monitor, &target, event_type, result, Some(message)).await;
+            }
         }
     }
 }
@@ -125,7 +141,7 @@ async fn in_cooldown(
     let cutoff = (Utc::now() - Duration::seconds(target.cooldown_sec.max(0))).to_rfc3339();
     sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM notification_deliveries WHERE monitor_id = ? AND channel_id = ? \
-         AND event_type = ? AND delivered_at >= ?",
+         AND event_type = ? AND success = 1 AND delivered_at >= ?",
     )
     .bind(&monitor.id)
     .bind(&target.channel_id)
@@ -142,15 +158,38 @@ async fn record_delivery(
     monitor: &MonitorRow,
     target: &DeliveryTarget,
     event_type: &str,
+    result: Option<SendResult>,
+    error_message: Option<String>,
 ) {
+    let success = result.is_some() && error_message.is_none();
+    let (request_method, request_url, request_payload, response_status_code, response_summary) =
+        result
+            .map(|value| {
+                (
+                    Some(value.request_method),
+                    Some(value.request_url),
+                    Some(value.request_payload),
+                    Some(i64::from(value.status_code)),
+                    Some(value.response_summary),
+                )
+            })
+            .unwrap_or_default();
     let _ = sqlx::query(
-        "INSERT INTO notification_deliveries (id, monitor_id, channel_id, event_type, delivered_at) \
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO notification_deliveries (id, monitor_id, channel_id, event_type, success, \
+         request_method, request_url, request_payload, response_status_code, response_summary, error_message, delivered_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(Uuid::new_v4().to_string())
     .bind(&monitor.id)
     .bind(&target.channel_id)
     .bind(event_type)
+    .bind(success)
+    .bind(request_method)
+    .bind(request_url)
+    .bind(request_payload)
+    .bind(response_status_code)
+    .bind(response_summary)
+    .bind(error_message)
     .bind(Utc::now().to_rfc3339())
     .execute(&state.pool)
     .await;

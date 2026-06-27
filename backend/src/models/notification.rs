@@ -82,3 +82,23 @@ pub struct NotificationEvent {
     pub status_code: Option<i64>,
     pub checked_at: String,
 }
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct NotificationDeliveryView {
+    pub id: String,
+    pub monitor_id: Option<String>,
+    pub monitor_name: Option<String>,
+    pub service_name: Option<String>,
+    pub channel_id: String,
+    pub channel_name: Option<String>,
+    pub channel_type: Option<String>,
+    pub event_type: String,
+    pub success: bool,
+    pub request_method: Option<String>,
+    pub request_url: Option<String>,
+    pub request_payload: Option<String>,
+    pub response_status_code: Option<i64>,
+    pub response_summary: Option<String>,
+    pub error_message: Option<String>,
+    pub delivered_at: String,
+}

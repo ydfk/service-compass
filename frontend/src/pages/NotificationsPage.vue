@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { Bell, Check, Edit, PlayerPlay, Trash } from '@vicons/tabler'
+import { Bell, Check, Edit, History, PlayerPlay, Trash } from '@vicons/tabler'
 import {
   NButton,
   NCard,
+  NDataTable,
+  NDescriptions,
+  NDescriptionsItem,
   NForm,
   NFormItem,
   NIcon,
@@ -14,11 +17,13 @@ import {
   NTag,
   useDialog,
   useMessage,
+  type DataTableColumns,
+  type PaginationProps,
 } from 'naive-ui'
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import { notificationsApi, type NotificationChannelInput } from '../api/notifications'
 import { servicesApi } from '../api/services'
-import type { NotificationChannel, Service } from '../types'
+import type { NotificationChannel, NotificationDelivery, Service } from '../types'
 
 interface ChannelSecrets {
   server_url: string
@@ -38,14 +43,22 @@ interface ChannelSecrets {
 }
 
 const channels = ref<NotificationChannel[]>([])
+const deliveries = ref<NotificationDelivery[]>([])
 const services = ref<Service[]>([])
 const editingChannel = ref<NotificationChannel | null>(null)
+const selectedDelivery = ref<NotificationDelivery | null>(null)
 const channelModal = ref(false)
+const deliveryModal = ref(false)
 const channelForm = ref<NotificationChannelInput>(emptyChannel())
 const secrets = ref<ChannelSecrets>(emptySecrets())
 const search = ref('')
 const message = useMessage()
 const dialog = useDialog()
+const deliveryPagination = reactive<PaginationProps>({
+  pageSize: 20,
+  pageSizes: [20, 50, 100],
+  showSizePicker: true,
+})
 
 const serviceOptions = computed(() =>
   services.value.map((item) => ({ label: item.name, value: item.id })),
@@ -62,6 +75,44 @@ const filteredChannels = computed(() => {
     ).includes(keyword),
   )
 })
+const deliveryColumns: DataTableColumns<NotificationDelivery> = [
+  {
+    title: '结果',
+    key: 'success',
+    render: (row) =>
+      h(
+        NTag,
+        { type: row.success ? 'success' : 'error', size: 'small', bordered: false },
+        { default: () => (row.success ? '成功' : '失败') },
+      ),
+  },
+  { title: '通知', key: 'title', ellipsis: { tooltip: true }, render: deliveryTitle },
+  { title: '通道', key: 'channel', ellipsis: { tooltip: true }, render: channelLabel },
+  { title: '事件', key: 'event_type', render: (row) => eventLabel(row.event_type) },
+  {
+    title: '接口',
+    key: 'request',
+    ellipsis: { tooltip: true },
+    render: (row) => [row.request_method, row.request_url].filter(Boolean).join(' ') || '—',
+  },
+  {
+    title: '摘要',
+    key: 'summary',
+    ellipsis: { tooltip: true },
+    render: deliverySummary,
+  },
+  { title: '时间', key: 'delivered_at', render: (row) => formatTime(row.delivered_at) },
+  {
+    title: '操作',
+    key: 'actions',
+    render: (row) =>
+      h(
+        NButton,
+        { size: 'small', secondary: true, type: 'info', onClick: () => openDelivery(row) },
+        { icon: () => h(NIcon, { component: History }), default: () => '详情' },
+      ),
+  },
+]
 
 function emptyChannel(): NotificationChannelInput {
   return { name: '', channel_type: 'bark', enabled: true }
@@ -87,9 +138,10 @@ function emptySecrets(): ChannelSecrets {
 }
 
 async function load() {
-  ;[channels.value, services.value] = await Promise.all([
+  ;[channels.value, services.value, deliveries.value] = await Promise.all([
     notificationsApi.channels(),
     servicesApi.list(),
+    notificationsApi.deliveries(),
   ])
 }
 
@@ -205,6 +257,7 @@ function selectAllServices() {
 async function testChannel(channel: NotificationChannel) {
   const result = await notificationsApi.testChannel(channel.id)
   message.success(`测试发送成功 · HTTP ${result.status_code}`)
+  deliveries.value = await notificationsApi.deliveries()
 }
 
 function removeChannel(channel: NotificationChannel) {
@@ -225,6 +278,38 @@ function scopeText(channel: NotificationChannel) {
   const ids = Array.isArray(channel.config.service_ids) ? channel.config.service_ids : []
   if (!ids.length) return '全部服务'
   return `${ids.length} 个服务`
+}
+
+function deliveryTitle(row: NotificationDelivery) {
+  return row.service_name || row.monitor_name || '测试通知'
+}
+
+function channelLabel(row: NotificationDelivery) {
+  const type = row.channel_type === 'synology_chat' ? 'Synology Chat' : row.channel_type
+  return [row.channel_name, type].filter(Boolean).join(' · ') || '未知通道'
+}
+
+function eventLabel(value: string) {
+  const labels: Record<string, string> = {
+    monitor_down: '离线',
+    monitor_recovery: '恢复',
+    monitor_warning: '告警',
+    test: '测试',
+  }
+  return labels[value] || value
+}
+
+function deliverySummary(row: NotificationDelivery) {
+  return row.error_message || row.response_summary || '—'
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleString()
+}
+
+function openDelivery(row: NotificationDelivery) {
+  selectedDelivery.value = row
+  deliveryModal.value = true
 }
 
 function searchableText(...values: Array<string | null | undefined>) {
@@ -271,6 +356,22 @@ onMounted(load)
       </NSpace>
     </NCard>
   </section>
+
+  <NCard size="small" class="delivery-card">
+    <template #header>
+      <span class="history-title"><NIcon :component="History" /> 通知收件箱</span>
+    </template>
+    <template #header-extra>
+      <NButton size="small" @click="load">刷新</NButton>
+    </template>
+    <NDataTable
+      :columns="deliveryColumns"
+      :data="deliveries"
+      :pagination="deliveryPagination"
+      size="small"
+      :row-key="(row: NotificationDelivery) => row.id"
+    />
+  </NCard>
 
   <NModal
     v-model:show="channelModal"
@@ -362,6 +463,35 @@ onMounted(load)
       </div>
     </NForm>
   </NModal>
+
+  <NModal
+    v-model:show="deliveryModal"
+    preset="card"
+    title="通知详情"
+    class="delivery-modal"
+    :mask-closable="false"
+  >
+    <template v-if="selectedDelivery">
+      <NDescriptions :column="2" size="small" bordered>
+        <NDescriptionsItem label="结果">{{ selectedDelivery.success ? '成功' : '失败' }}</NDescriptionsItem>
+        <NDescriptionsItem label="事件">{{ eventLabel(selectedDelivery.event_type) }}</NDescriptionsItem>
+        <NDescriptionsItem label="服务">{{ deliveryTitle(selectedDelivery) }}</NDescriptionsItem>
+        <NDescriptionsItem label="通道">{{ channelLabel(selectedDelivery) }}</NDescriptionsItem>
+        <NDescriptionsItem label="请求方法">{{ selectedDelivery.request_method || '—' }}</NDescriptionsItem>
+        <NDescriptionsItem label="响应状态">{{ selectedDelivery.response_status_code ?? '—' }}</NDescriptionsItem>
+        <NDescriptionsItem label="请求地址" :span="2">{{ selectedDelivery.request_url || '—' }}</NDescriptionsItem>
+        <NDescriptionsItem label="时间" :span="2">{{ formatTime(selectedDelivery.delivered_at) }}</NDescriptionsItem>
+      </NDescriptions>
+      <div class="detail-block">
+        <strong>请求内容</strong>
+        <pre>{{ selectedDelivery.request_payload || '—' }}</pre>
+      </div>
+      <div class="detail-block">
+        <strong>响应 / 错误</strong>
+        <pre>{{ selectedDelivery.error_message || selectedDelivery.response_summary || '—' }}</pre>
+      </div>
+    </template>
+  </NModal>
 </template>
 
 <style scoped>
@@ -379,6 +509,12 @@ onMounted(load)
 .channel-main small { font-size: 0.72rem; }
 .channel-actions { flex-wrap: nowrap; }
 .notify-modal { width: min(48rem, calc(100vw - 2rem)); }
+.delivery-card { margin-top: 1.2rem; }
+.history-title { display: inline-flex; align-items: center; gap: 0.45rem; }
+.delivery-modal { width: min(58rem, calc(100vw - 2rem)); }
+.detail-block { display: grid; gap: 0.45rem; margin-top: 0.85rem; }
+.detail-block strong { color: var(--sc-muted); }
+.detail-block pre { max-height: 18rem; margin: 0; overflow: auto; padding: 0.75rem; border: 1px solid var(--sc-border); border-radius: 0.65rem; background: rgb(15 23 42 / 28%); white-space: pre-wrap; word-break: break-word; }
 .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .scope-card { margin: 0.5rem 0 1rem; background: var(--sc-card); }
 .scope-row, .footer-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }

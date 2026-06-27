@@ -1,4 +1,9 @@
-import type { NotificationChannel, NotificationRule, NotificationRuleInput } from '../types'
+import type {
+  NotificationChannel,
+  NotificationDelivery,
+  NotificationRule,
+  NotificationRuleInput,
+} from '../types'
 import { api } from './client'
 
 export interface NotificationChannelInput {
@@ -22,6 +27,7 @@ export const notificationsApi = {
       { method: 'POST' },
     ),
   rules: () => api<NotificationRule[]>('/api/notifications/rules'),
+  deliveries: () => api<NotificationDelivery[]>('/api/notifications/deliveries'),
   createRule: (input: NotificationRuleInput) =>
     api<NotificationRule>('/api/notifications/rules', request('POST', input)),
   updateRule: (id: string, input: NotificationRuleInput) =>

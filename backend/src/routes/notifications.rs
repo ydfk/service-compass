@@ -11,7 +11,7 @@ use crate::{
     error::{AppError, AppResult},
     models::notification::{
         NotificationChannelInput, NotificationChannelRow, NotificationChannelView,
-        NotificationEvent, NotificationRule, NotificationRuleInput,
+        NotificationDeliveryView, NotificationEvent, NotificationRule, NotificationRuleInput,
     },
     notify,
     state::AppState,
@@ -28,6 +28,7 @@ pub fn router() -> Router<AppState> {
             get(get_channel).put(update_channel).delete(remove_channel),
         )
         .route("/api/notifications/channels/{id}/test", post(test_channel))
+        .route("/api/notifications/deliveries", get(list_deliveries))
         .route(
             "/api/notifications/rules",
             get(list_rules).post(create_rule),
@@ -120,11 +121,65 @@ async fn test_channel(
         checked_at: Utc::now().to_rfc3339(),
     };
     let client = reqwest::Client::new();
-    let result = notify::send(&client, &channel.channel_type, &config, &event)
-        .await
-        .map_err(AppError::Internal)?;
+    let result = match notify::send(&client, &channel.channel_type, &config, &event).await {
+        Ok(result) => {
+            record_test_delivery(&state, &channel, &result, None).await;
+            result
+        }
+        Err(error) => {
+            let message = error.to_string();
+            let result = notify::failure_result(&error).unwrap_or_else(notify::SendResult::empty);
+            record_test_delivery(&state, &channel, &result, Some(&message)).await;
+            return Err(AppError::Internal(error));
+        }
+    };
     tracing::info!(channel_id = %id, status_code = result.status_code, "通知通道测试完成");
     Ok(Json(result))
+}
+
+async fn list_deliveries(
+    State(state): State<AppState>,
+) -> AppResult<Json<Vec<NotificationDeliveryView>>> {
+    let rows = sqlx::query_as::<_, NotificationDeliveryView>(
+        "SELECT d.id, d.monitor_id, m.name AS monitor_name, s.name AS service_name, \
+         d.channel_id, c.name AS channel_name, c.channel_type, d.event_type, d.success, \
+         d.request_method, d.request_url, d.request_payload, d.response_status_code, \
+         d.response_summary, d.error_message, d.delivered_at \
+         FROM notification_deliveries d \
+         LEFT JOIN notification_channels c ON c.id = d.channel_id \
+         LEFT JOIN monitors m ON m.id = d.monitor_id \
+         LEFT JOIN services s ON s.id = m.service_id \
+         ORDER BY d.delivered_at DESC LIMIT 500",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(rows))
+}
+
+async fn record_test_delivery(
+    state: &AppState,
+    channel: &NotificationChannelRow,
+    result: &notify::SendResult,
+    error_message: Option<&str>,
+) {
+    let success = error_message.is_none();
+    let _ = sqlx::query(
+        "INSERT INTO notification_deliveries (id, monitor_id, channel_id, event_type, success, \
+         request_method, request_url, request_payload, response_status_code, response_summary, error_message, delivered_at) \
+         VALUES (?, NULL, ?, 'test', ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&channel.id)
+    .bind(success)
+    .bind((!result.request_method.is_empty()).then_some(&result.request_method))
+    .bind((!result.request_url.is_empty()).then_some(&result.request_url))
+    .bind((!result.request_payload.is_empty()).then_some(&result.request_payload))
+    .bind((result.status_code > 0).then_some(i64::from(result.status_code)))
+    .bind((!result.response_summary.is_empty()).then_some(&result.response_summary))
+    .bind(error_message)
+    .bind(Utc::now().to_rfc3339())
+    .execute(&state.pool)
+    .await;
 }
 
 async fn list_rules(State(state): State<AppState>) -> AppResult<Json<Vec<NotificationRule>>> {

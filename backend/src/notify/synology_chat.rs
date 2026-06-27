@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     models::notification::NotificationEvent,
-    notify::{SendResult, required, status_message},
+    notify::{SendFailure, SendResult, required, status_message},
 };
 
 struct Endpoint {
@@ -33,13 +33,24 @@ pub async fn send(
             "Synology Chat Chatbot 模式必须填写至少一个数字用户 ID；频道通知请使用 Incoming Webhook"
         );
     }
+    let request_payload = body.to_string();
     let (status, response_body) = send_request(&client, &endpoint, method, &body).await?;
-    validate_response(method, status, &response_body)?;
     let summary = response_body.chars().take(512).collect::<String>();
-    Ok(SendResult {
+    let result = SendResult {
         status_code: status.as_u16(),
-        response_summary: summary,
-    })
+        response_summary: summary.clone(),
+        request_method: method.to_owned(),
+        request_url: endpoint.url.to_string(),
+        request_payload: request_payload.chars().take(2048).collect(),
+    };
+    if let Err(error) = validate_response(method, status, &response_body) {
+        return Err(SendFailure {
+            result,
+            message: error.to_string(),
+        }
+        .into());
+    }
+    Ok(result)
 }
 
 pub fn validate_config(config: &Value) -> Result<()> {

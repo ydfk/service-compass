@@ -236,3 +236,22 @@ export interface NotificationRule {
 }
 
 export type NotificationRuleInput = Omit<NotificationRule, 'id' | 'created_at' | 'updated_at'>
+
+export interface NotificationDelivery {
+  id: string
+  monitor_id?: string | null
+  monitor_name?: string | null
+  service_name?: string | null
+  channel_id: string
+  channel_name?: string | null
+  channel_type?: NotificationChannel['channel_type'] | null
+  event_type: string
+  success: boolean
+  request_method?: string | null
+  request_url?: string | null
+  request_payload?: string | null
+  response_status_code?: number | null
+  response_summary?: string | null
+  error_message?: string | null
+  delivered_at: string
+}

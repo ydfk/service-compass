@@ -7,13 +7,49 @@ use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local};
 use serde::Serialize;
 use serde_json::Value;
+use std::{error::Error, fmt};
 
 use crate::models::notification::NotificationEvent;
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct SendResult {
     pub status_code: u16,
     pub response_summary: String,
+    pub request_method: String,
+    pub request_url: String,
+    pub request_payload: String,
+}
+
+#[derive(Debug)]
+pub struct SendFailure {
+    pub result: SendResult,
+    pub message: String,
+}
+
+impl fmt::Display for SendFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl Error for SendFailure {}
+
+impl SendResult {
+    pub fn empty() -> Self {
+        Self {
+            status_code: 0,
+            response_summary: String::new(),
+            request_method: String::new(),
+            request_url: String::new(),
+            request_payload: String::new(),
+        }
+    }
+}
+
+pub fn failure_result(error: &anyhow::Error) -> Option<SendResult> {
+    error
+        .downcast_ref::<SendFailure>()
+        .map(|failure| failure.result.clone())
 }
 
 pub async fn send(
@@ -45,17 +81,30 @@ pub async fn send(
     result
 }
 
-pub async fn response_result(response: reqwest::Response) -> Result<SendResult> {
+pub async fn response_result(
+    response: reqwest::Response,
+    request_method: impl Into<String>,
+    request_url: impl Into<String>,
+    request_payload: impl Into<String>,
+) -> Result<SendResult> {
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     let summary = body.chars().take(512).collect::<String>();
-    if !status.is_success() {
-        bail!("通知服务返回 HTTP {}：{}", status.as_u16(), summary);
-    }
-    Ok(SendResult {
+    let result = SendResult {
         status_code: status.as_u16(),
-        response_summary: summary,
-    })
+        response_summary: summary.clone(),
+        request_method: request_method.into(),
+        request_url: request_url.into(),
+        request_payload: request_payload.into().chars().take(2048).collect(),
+    };
+    if !status.is_success() {
+        return Err(SendFailure {
+            result,
+            message: format!("通知服务返回 HTTP {}：{}", status.as_u16(), summary),
+        }
+        .into());
+    }
+    Ok(result)
 }
 
 pub fn required<'a>(config: &'a Value, key: &str) -> Result<&'a str> {
