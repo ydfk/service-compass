@@ -36,12 +36,15 @@ import type {
   MonitorInput,
   NotificationChannel,
   Service,
+  Space,
+  Status,
   StatusPoint,
 } from '../types'
-import { monitorToInput, UNGROUPED_ID } from '../utils/serviceForms'
+import { monitorToInput } from '../utils/serviceForms'
 
 const monitors = ref<Monitor[]>([])
 const services = ref<Service[]>([])
+const spaces = ref<Space[]>([])
 const groups = ref<Group[]>([])
 const channels = ref<NotificationChannel[]>([])
 const checks = ref<MonitorCheck[]>([])
@@ -53,25 +56,44 @@ const notificationModal = ref(false)
 const loading = ref(false)
 const selectedGroupId = ref('')
 const selectedServiceId = ref('')
+const selectedSpaceId = ref('')
+const selectedStatus = ref<Status | ''>('')
 const search = ref('')
 const message = useMessage()
 
 const serviceById = computed(() => new Map(services.value.map((item) => [item.id, item])))
 const groupById = computed(() => new Map(groups.value.map((item) => [item.id, item])))
+const scopedGroups = computed(() =>
+  selectedSpaceId.value
+    ? groups.value.filter((group) => group.space_id === selectedSpaceId.value)
+    : groups.value,
+)
+const spaceOptions = computed(() => [
+  { label: '全部空间', value: '' },
+  ...spaces.value.map((item) => ({ label: item.name, value: item.id })),
+])
 const groupOptions = computed(() => [
   { label: '全部分组', value: '' },
-  { label: '未分组', value: UNGROUPED_ID },
-  ...groups.value.map((item) => ({ label: item.name, value: item.id })),
+  ...scopedGroups.value.map((item) => ({ label: groupLabel(item), value: item.id })),
 ])
 const serviceOptions = computed(() => {
-  const filtered = selectedGroupId.value
-    ? services.value.filter((item) => item.group_id === selectedGroupId.value)
-    : services.value
+  const filtered = services.value.filter((service) => {
+    if (selectedGroupId.value) return service.group_id === selectedGroupId.value
+    if (selectedSpaceId.value) return serviceSpaceId(service) === selectedSpaceId.value
+    return true
+  })
   return [
     { label: '全部服务', value: '' },
     ...filtered.map((item) => ({ label: item.name, value: item.id })),
   ]
 })
+const statusOptions = [
+  { label: '全部状态', value: '' },
+  { label: '在线', value: 'up' },
+  { label: '异常', value: 'down' },
+  { label: '告警', value: 'warning' },
+  { label: '未知', value: 'unknown' },
+]
 const channelOptions = computed(() =>
   channels.value.map((item) => ({ label: item.name, value: item.id })),
 )
@@ -79,9 +101,14 @@ const filteredMonitors = computed(() =>
   monitors.value
     .filter((monitor) => {
       if (selectedServiceId.value) return monitor.service_id === selectedServiceId.value
-      if (!selectedGroupId.value) return true
       const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
-      return service?.group_id === selectedGroupId.value
+      if (selectedGroupId.value) return service?.group_id === selectedGroupId.value
+      if (selectedSpaceId.value) return service && serviceSpaceId(service) === selectedSpaceId.value
+      return true
+    })
+    .filter((monitor) => {
+      if (!selectedStatus.value) return true
+      return monitor.current_status === selectedStatus.value
     })
     .filter((monitor) => {
       const keyword = search.value.trim().toLowerCase()
@@ -238,6 +265,20 @@ function searchableText(...values: Array<string | null | undefined>) {
   return values.filter(Boolean).join(' ').toLowerCase()
 }
 
+function spaceName(id?: string | null) {
+  return spaces.value.find((item) => item.id === id)?.name || '默认空间'
+}
+
+function groupLabel(group: Group) {
+  return `${spaceName(group.space_id)} / ${group.name}`
+}
+
+function serviceSpaceId(service: Service) {
+  return (
+    groups.value.find((group) => group.id === service.group_id)?.space_id || spaces.value[0]?.id
+  )
+}
+
 function monitorPoints(monitor: Monitor): StatusPoint[] {
   const checks = [...monitor.recent_checks].reverse()
   if (checks.length) return checks.map(checkPoint)
@@ -269,7 +310,7 @@ function serviceScope(monitor: Monitor) {
   const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
   if (!service) return '未关联服务'
   const group = groupById.value.get(service.group_id)
-  return `${service.name} / ${group?.name || '未分组'}`
+  return `${service.name} / ${group ? groupLabel(group) : '默认空间 / 未分组'}`
 }
 
 function serviceCell(monitor: Monitor) {
@@ -278,7 +319,7 @@ function serviceCell(monitor: Monitor) {
   const group = groupById.value.get(service.group_id)
   return h('div', { class: 'service-cell' }, [
     h('strong', service.name),
-    h('small', group?.name || '未分组'),
+    h('small', group ? groupLabel(group) : '默认空间 / 未分组'),
   ])
 }
 
@@ -344,12 +385,14 @@ function emptyMonitor(): MonitorInput {
 async function load() {
   loading.value = true
   try {
-    ;[monitors.value, services.value, groups.value, channels.value] = await Promise.all([
-      monitorsApi.list(),
-      servicesApi.list(),
-      groupsApi.list(),
-      notificationsApi.channels(),
-    ])
+    ;[monitors.value, services.value, groups.value, spaces.value, channels.value] =
+      await Promise.all([
+        monitorsApi.list(),
+        servicesApi.list(),
+        groupsApi.list(),
+        groupsApi.spaces(),
+        notificationsApi.channels(),
+      ])
   } finally {
     loading.value = false
   }
@@ -415,11 +458,11 @@ onMounted(load)
 
   <NCard class="filter-card" size="small">
     <NSpace>
-      <NInput
-        v-model:value="search"
-        clearable
-        placeholder="搜索监控、服务、分组、地址或错误"
-        class="filter-search"
+      <NSelect
+        v-model:value="selectedSpaceId"
+        :options="spaceOptions"
+        class="filter-select"
+        @update:value="selectedGroupId = ''; selectedServiceId = ''"
       />
       <NSelect
         v-model:value="selectedGroupId"
@@ -428,6 +471,13 @@ onMounted(load)
         @update:value="selectedServiceId = ''"
       />
       <NSelect v-model:value="selectedServiceId" :options="serviceOptions" class="filter-select" filterable />
+      <NSelect v-model:value="selectedStatus" :options="statusOptions" class="filter-select" />
+      <NInput
+        v-model:value="search"
+        clearable
+        placeholder="搜索监控、服务、分组、地址或错误"
+        class="filter-search"
+      />
     </NSpace>
   </NCard>
 
@@ -566,7 +616,7 @@ onMounted(load)
   width: 14rem;
 }
 .filter-search {
-  width: 20rem;
+  width: min(34rem, 100%);
 }
 :deep(.table-strip) { width: min(13rem, 100%); min-width: 0; }
 :global(.history-drawer-body) { min-width: 0; overflow-x: hidden; }

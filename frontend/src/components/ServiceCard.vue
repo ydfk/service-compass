@@ -87,7 +87,7 @@ function trackPoints(track: MonitorTrack): StatusPoint[] {
         <StatusStrip :points="trackPoints(track)" title="过去 24 小时最近 30 次检查" />
       </div>
     </div>
-    <span v-if="!activeUrl" class="no-url-badge">{{ cardMode === 'detail' ? '仅展示' : '无链接' }}</span>
+    <span v-if="!activeUrl && cardMode === 'detail'" class="no-url-badge">仅展示</span>
 
     <div v-if="editable" class="card-tools" @click.stop>
       <template v-if="sorting">

@@ -81,13 +81,18 @@ pub fn status_message(event: &NotificationEvent) -> String {
     let status = status_icon(&event.status);
     let latency = event
         .latency_ms
-        .map(|value| value.to_string())
-        .unwrap_or_default();
+        .map(|value| format!("{value} ms"))
+        .unwrap_or_else(|| "—".into());
     let checked_at = format_checked_at(&event.checked_at);
     let detail = detail_text(event);
+    let status_code = event
+        .status_code
+        .map(|value| format!("\n状态码：{value}"))
+        .unwrap_or_default();
 
     format!(
-        "ℹ️ 状态通知\n\n服务：{service}\n地址：{target}\n状态：{status}\n\n[{service}] [{status}] {detail}\n\n响应时间：{latency} ms\n检查时间：{checked_at}\n详情：{detail}"
+        "{status} · {service}\n{detail}\n\n服务：{service}\n监控：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}",
+        monitor = event.monitor_name
     )
 }
 
@@ -133,11 +138,12 @@ mod tests {
         };
 
         let message = status_message(&event);
-        assert!(message.contains("ℹ️ 状态通知"));
+        assert!(message.starts_with("🔴 Down · new-api\nRequest failed with status code 404"));
         assert!(message.contains("服务：new-api"));
+        assert!(message.contains("监控：HTTP"));
         assert!(message.contains("状态：🔴 Down"));
-        assert!(message.contains("[new-api] [🔴 Down] Request failed with status code 404"));
         assert!(message.contains("响应时间：123 ms"));
+        assert!(message.contains("状态码：404"));
         assert!(message.contains("详情：Request failed with status code 404"));
     }
 }

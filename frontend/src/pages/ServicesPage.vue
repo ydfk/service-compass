@@ -23,7 +23,8 @@ import { groupsApi, type GroupInput, type SpaceInput } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
 import { servicesApi } from '../api/services'
 import ServiceEditorModal from '../components/ServiceEditorModal.vue'
-import type { Group, Monitor, MonitorInput, Service, ServiceInput, Space } from '../types'
+import StatusBadge from '../components/StatusBadge.vue'
+import type { Group, Monitor, MonitorInput, Service, ServiceInput, Space, Status } from '../types'
 import {
   cleanServiceInput,
   emptyHttpMonitor,
@@ -49,6 +50,7 @@ const draggingGroupId = ref<string | null>(null)
 const search = ref('')
 const selectedSpaceId = ref('')
 const selectedGroupId = ref('')
+const selectedStatus = ref<Status | ''>('')
 const groupForm = ref<GroupInput>({ name: '', description: '', sort_order: 0 })
 const spaceForm = ref<SpaceInput>({ name: '', description: '', sort_order: 0 })
 const serviceForm = ref<ServiceInput>(emptyService())
@@ -66,6 +68,7 @@ const filteredServices = computed(() => {
   return services.value.filter((service) => {
     if (selectedGroupId.value && service.group_id !== selectedGroupId.value) return false
     if (selectedSpaceId.value && serviceSpaceId(service) !== selectedSpaceId.value) return false
+    if (selectedStatus.value && serviceStatus(service) !== selectedStatus.value) return false
     if (!keyword) return true
     const groupName = groupScope(service.group_id)
     return searchableText(
@@ -100,8 +103,20 @@ const groupOptions = computed(() => [
     value: item.id,
   })),
 ])
+const statusOptions = [
+  { label: '全部状态', value: '' },
+  { label: '在线', value: 'up' },
+  { label: '异常', value: 'down' },
+  { label: '告警', value: 'warning' },
+  { label: '未知', value: 'unknown' },
+]
 
 const columns: DataTableColumns<Service> = [
+  {
+    title: '状态',
+    key: 'status',
+    render: (row) => h(StatusBadge, { status: serviceStatus(row) }),
+  },
   { title: '服务', key: 'name', render: (row) => h('strong', row.name) },
   {
     title: '空间 / 分组',
@@ -167,6 +182,10 @@ function groupScope(groupId: string) {
   const group = groups.value.find((item) => item.id === groupId)
   if (!group) return '默认空间 / 未分组'
   return `${spaceName(group.space_id)} / ${group.name}`
+}
+
+function serviceStatus(service: Service): Status {
+  return service.status || 'unknown'
 }
 
 function serviceSpaceId(service: Service) {
@@ -380,6 +399,7 @@ onMounted(async () => {
     <NSpace>
       <NSelect v-model:value="selectedSpaceId" :options="filterSpaceOptions" class="filter-select" @update:value="selectedGroupId = ''" />
       <NSelect v-model:value="selectedGroupId" :options="groupOptions" class="filter-select" />
+      <NSelect v-model:value="selectedStatus" :options="statusOptions" class="filter-select" />
       <NInput v-model:value="search" clearable placeholder="搜索服务、分组、地址、Docker 名称或镜像" class="filter-search" />
     </NSpace>
   </NCard>
@@ -440,7 +460,7 @@ onMounted(async () => {
 .group-chain button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filter-card { margin-bottom: 0.8rem; }
 .filter-select { width: 12rem; }
-.filter-search { width: min(26rem, 100%); }
+.filter-search { width: min(34rem, 100%); }
 .group-modal { width: min(28rem, calc(100vw - 1.5rem)); }
 @media (max-width: 760px) { .page-header { align-items: flex-start; flex-direction: column; } .filter-select, .filter-search { width: 100%; } }
 </style>
