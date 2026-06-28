@@ -268,11 +268,11 @@ async fn save_local(
     let directory = PathBuf::from(directory);
     tokio::fs::create_dir_all(&directory)
         .await
-        .map_err(anyhow::Error::from)?;
+        .map_err(|error| AppError::External(format!("本地备份目录不可用：{error}")))?;
     let target = directory.join(filename);
     tokio::fs::write(&target, bytes)
         .await
-        .map_err(anyhow::Error::from)?;
+        .map_err(|error| AppError::External(format!("本地备份写入失败：{error}")))?;
     cleanup_local(&directory, config.retention_count.max(1)).await;
     Ok(TargetResult {
         location: target.to_string_lossy().to_string(),
@@ -309,7 +309,7 @@ async fn test_webdav(
     .header("Depth", "0")
     .send()
     .await
-    .map_err(anyhow::Error::from)?;
+    .map_err(|error| AppError::External(format!("WebDAV 目录检查请求失败：{error}")))?;
     if propfind.status() == StatusCode::NOT_FOUND {
         let mkcol = webdav_request(
             state,
@@ -320,7 +320,7 @@ async fn test_webdav(
         )
         .send()
         .await
-        .map_err(anyhow::Error::from)?;
+        .map_err(|error| AppError::External(format!("WebDAV 创建目录请求失败：{error}")))?;
         ensure_http_success("WebDAV 创建目录失败", mkcol).await?;
     } else {
         ensure_http_success("WebDAV 目录不可用", propfind).await?;
@@ -346,7 +346,7 @@ async fn put_webdav(
         .body(bytes)
         .send()
         .await
-        .map_err(anyhow::Error::from)?;
+        .map_err(|error| AppError::External(format!("WebDAV 上传请求失败：{error}")))?;
     let status_code = response.status().as_u16();
     let summary = response
         .text()
@@ -356,10 +356,9 @@ async fn put_webdav(
         .take(512)
         .collect::<String>();
     if !(200..300).contains(&status_code) && status_code != 201 && status_code != 204 {
-        return Err(AppError::Internal(anyhow::anyhow!(
+        return Err(AppError::External(format!(
             "WebDAV 上传失败：HTTP {} {}",
-            status_code,
-            summary
+            status_code, summary
         )));
     }
     Ok(TargetResult {
@@ -405,7 +404,7 @@ async fn ensure_http_success(label: &str, response: reqwest::Response) -> AppRes
         .take(512)
         .collect::<String>();
     if !status.is_success() {
-        return Err(AppError::Internal(anyhow::anyhow!(
+        return Err(AppError::External(format!(
             "{}：HTTP {} {}",
             label,
             status.as_u16(),
@@ -417,11 +416,9 @@ async fn ensure_http_success(label: &str, response: reqwest::Response) -> AppRes
 
 fn ensure_oss_success(label: &str, response: oss::OssResponse) -> AppResult<TargetResult> {
     if !(200..300).contains(&response.status_code) {
-        return Err(AppError::Internal(anyhow::anyhow!(
+        return Err(AppError::External(format!(
             "{}：HTTP {} {}",
-            label,
-            response.status_code,
-            response.response_summary
+            label, response.status_code, response.response_summary
         )));
     }
     Ok(TargetResult {
@@ -597,7 +594,7 @@ async fn finish_run(
             "failed",
             None,
             http_status_from_error(&error.to_string()),
-            None,
+            response_summary_from_error(&error.to_string()),
             Some(error.to_string()),
         ),
     };
@@ -758,4 +755,13 @@ fn http_status_from_error(message: &str) -> Option<i64> {
         .take_while(|character| character.is_ascii_digit())
         .collect::<String>();
     digits.parse().ok()
+}
+
+fn response_summary_from_error(message: &str) -> Option<String> {
+    let marker = "HTTP ";
+    let start = message.find(marker)? + marker.len();
+    let after_status = message[start..]
+        .trim_start_matches(|character: char| character.is_ascii_digit())
+        .trim();
+    (!after_status.is_empty()).then(|| after_status.chars().take(512).collect())
 }

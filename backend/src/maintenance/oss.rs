@@ -94,7 +94,7 @@ async fn request(
         .body(bytes)
         .send()
         .await
-        .map_err(anyhow::Error::from)?;
+        .map_err(|error| AppError::External(format!("阿里云 OSS 请求失败：{error}")))?;
     let status_code = response.status().as_u16();
     let response_summary = response
         .text()

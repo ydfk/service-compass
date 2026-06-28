@@ -135,13 +135,14 @@ pub fn status_message(event: &NotificationEvent) -> String {
     let checked_at = format_checked_at(&event.checked_at);
     let detail = detail_text(event);
     let location = location_line(event);
+    let summary_location = summary_location(event);
     let status_code = event
         .status_code
         .map(|value| format!("\n状态码：{value}"))
         .unwrap_or_default();
 
     format!(
-        "{status} · {service} · {check_label}\n{detail}\n\n服务：{service}{location}\n检查项：{check_label}\n监控名称：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}\n\n—— ServiceCompass ——",
+        "{status} · {summary_location}{service} · {check_label}\n{detail}\n\n服务：{service}{location}\n检查项：{check_label}\n监控名称：{monitor}\n地址：{target}\n状态：{status}\n响应时间：{latency}\n检查时间：{checked_at}{status_code}\n详情：{detail}\n\n—— ServiceCompass ——",
         check_label = event.check_label,
         monitor = event.monitor_name
     )
@@ -153,6 +154,28 @@ fn location_line(event: &NotificationEvent) -> String {
     };
     let group = event.group_name.as_deref().unwrap_or("未分组");
     format!("\n位置：{space} / {group}")
+}
+
+fn summary_location(event: &NotificationEvent) -> String {
+    let Some(space) = event.space_name.as_deref() else {
+        return String::new();
+    };
+    let group = event.group_name.as_deref().unwrap_or("未分组");
+    format!(
+        "{} / {} · ",
+        compact_text(space, 12),
+        compact_text(group, 12)
+    )
+}
+
+fn compact_text(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let text = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        format!("{text}…")
+    } else {
+        text
+    }
 }
 
 fn detail_text(event: &NotificationEvent) -> String {
@@ -200,9 +223,9 @@ mod tests {
         };
 
         let message = status_message(&event);
-        assert!(
-            message.starts_with("🔴 Down · new-api · HTTP\nRequest failed with status code 404")
-        );
+        assert!(message.starts_with(
+            "🔴 Down · Domestic / home · new-api · HTTP\nRequest failed with status code 404"
+        ));
         assert!(message.contains("服务：new-api"));
         assert!(message.contains("位置：Domestic / home"));
         assert!(message.contains("检查项：HTTP"));
