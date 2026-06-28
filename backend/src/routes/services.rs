@@ -241,7 +241,7 @@ async fn sync_service_monitors(
     service_id: &str,
     input: &ServiceInput,
 ) -> AppResult<()> {
-    let legacy_monitor = input.create_monitor.then(|| {
+    let mut legacy_monitor = input.create_monitor.then(|| {
         MonitorInput::service_http(
             service_id.to_string(),
             format!("{} HTTP", input.name.trim()),
@@ -249,7 +249,15 @@ async fn sync_service_monitors(
             input.monitor_target_url_mode.clone(),
         )
     });
-    let http_monitor = input.monitor.as_ref().or(legacy_monitor.as_ref());
+    let notification = service_notification(input);
+    let mut monitor_with_notify = input.monitor.clone();
+    if let (Some(monitor), Some(notification)) = (&mut monitor_with_notify, notification.as_ref()) {
+        apply_notification(monitor, notification);
+    }
+    if let (Some(monitor), Some(notification)) = (&mut legacy_monitor, notification.as_ref()) {
+        apply_notification(monitor, notification);
+    }
+    let http_monitor = monitor_with_notify.as_ref().or(legacy_monitor.as_ref());
     monitors::sync_http_for_service(state, service_id, input.name.trim(), http_monitor).await?;
     let cert_monitor = http_monitor.and_then(|monitor| cert_monitor_input(input, monitor));
     monitors::sync_cert_for_service(
@@ -265,7 +273,58 @@ async fn sync_service_monitors(
             || input.docker_name.is_some()
             || (input.docker_compose_project.is_some() && input.docker_compose_service.is_some()));
     monitors::sync_docker_for_service(state, service_id, input.name.trim(), docker_enabled).await?;
+    if let Some(notification) = notification {
+        if docker_enabled {
+            monitors::sync_notification_for_service_monitor(
+                state,
+                service_id,
+                "docker",
+                notification.enabled,
+                &notification.channel_ids,
+            )
+            .await?;
+        }
+        if input.cert_expiry_notify {
+            monitors::sync_notification_for_service_monitor(
+                state,
+                service_id,
+                "cert",
+                notification.enabled,
+                &notification.channel_ids,
+            )
+            .await?;
+        }
+    }
     Ok(())
+}
+
+struct ServiceNotification {
+    enabled: bool,
+    channel_ids: Vec<String>,
+}
+
+fn service_notification(input: &ServiceInput) -> Option<ServiceNotification> {
+    if input.status_notify_enabled.is_none() && input.status_notification_channel_ids.is_none() {
+        return input.monitor.as_ref().map(|monitor| ServiceNotification {
+            enabled: monitor.notify_enabled,
+            channel_ids: monitor.notification_channel_ids.clone(),
+        });
+    }
+    Some(ServiceNotification {
+        enabled: input.status_notify_enabled.unwrap_or(false),
+        channel_ids: input
+            .status_notification_channel_ids
+            .clone()
+            .unwrap_or_default(),
+    })
+}
+
+fn apply_notification(monitor: &mut MonitorInput, notification: &ServiceNotification) {
+    monitor.notify_enabled = notification.enabled;
+    monitor.notification_channel_ids = notification.channel_ids.clone();
+    monitor.notify_on_down = true;
+    monitor.notify_on_recovery = true;
+    monitor.notify_on_warning = true;
 }
 
 fn cert_monitor_input(input: &ServiceInput, monitor: &MonitorInput) -> Option<MonitorInput> {
@@ -299,6 +358,68 @@ fn cert_source_url(input: &ServiceInput, monitor: &MonitorInput) -> Option<Strin
 fn validate(input: &ServiceInput) -> AppResult<()> {
     if input.name.trim().is_empty() {
         return Err(AppError::Validation("服务名称不能为空".into()));
+    }
+    validate_service_notification(input)?;
+    if input.create_monitor {
+        let legacy_monitor;
+        let monitor = if let Some(monitor) = input.monitor.as_ref() {
+            monitor
+        } else {
+            legacy_monitor = MonitorInput::service_http(
+                "pending".into(),
+                format!("{} HTTP", input.name.trim()),
+                input.monitor_type.clone(),
+                input.monitor_target_url_mode.clone(),
+            );
+            &legacy_monitor
+        };
+        validate_monitor_source(input, monitor)?;
+        monitors::validate_input(monitor)?;
+    }
+    Ok(())
+}
+
+fn validate_service_notification(input: &ServiceInput) -> AppResult<()> {
+    let notification = service_notification(input);
+    if notification
+        .as_ref()
+        .is_some_and(|item| item.enabled && item.channel_ids.is_empty())
+    {
+        return Err(AppError::Validation("开启通知时必须选择通知通道".into()));
+    }
+    Ok(())
+}
+
+fn validate_monitor_source(input: &ServiceInput, monitor: &MonitorInput) -> AppResult<()> {
+    if matches!(monitor.monitor_type.as_str(), "http" | "http_keyword") {
+        if monitor.target_url_mode == "custom"
+            && monitor
+                .target_url
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        {
+            return Err(AppError::Validation("目标 URL 不能为空".into()));
+        }
+        if matches!(monitor.target_url_mode.as_str(), "local" | "public")
+            && input
+                .local_url
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            && input
+                .public_url
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+        {
+            return Err(AppError::Validation(
+                "监控使用服务地址时，内网地址或外网地址至少填写一个".into(),
+            ));
+        }
     }
     Ok(())
 }

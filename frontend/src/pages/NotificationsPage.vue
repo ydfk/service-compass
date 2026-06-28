@@ -118,7 +118,7 @@ const deliveryColumns: DataTableColumns<NotificationDelivery> = [
     ellipsis: { tooltip: true },
     render: deliverySummary,
   },
-  { title: '时间', key: 'delivered_at', render: (row) => formatTime(row.delivered_at) },
+  { title: '时间（本地）', key: 'delivered_at', render: (row) => formatTime(row.delivered_at) },
   {
     title: '操作',
     key: 'actions',
@@ -512,7 +512,8 @@ onMounted(load)
         <NDescriptionsItem label="请求方法">{{ selectedDelivery.request_method || '—' }}</NDescriptionsItem>
         <NDescriptionsItem label="响应状态">{{ selectedDelivery.response_status_code ?? '—' }}</NDescriptionsItem>
         <NDescriptionsItem label="请求地址" :span="2">{{ selectedDelivery.request_url || '—' }}</NDescriptionsItem>
-        <NDescriptionsItem label="时间" :span="2">{{ formatTime(selectedDelivery.delivered_at) }}</NDescriptionsItem>
+        <NDescriptionsItem label="本地时间" :span="2">{{ formatTime(selectedDelivery.delivered_at) }}</NDescriptionsItem>
+        <NDescriptionsItem label="原始时间 / UTC RFC3339" :span="2">{{ selectedDelivery.delivered_at }}</NDescriptionsItem>
       </NDescriptions>
       <div class="detail-block">
         <strong>请求内容</strong>

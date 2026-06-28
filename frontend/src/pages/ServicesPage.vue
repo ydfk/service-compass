@@ -31,8 +31,10 @@ import {
   emptyService,
   monitorToInput,
   serviceCertMonitor,
+  serviceDockerMonitor,
   serviceHttpMonitor,
   serviceToInput,
+  validateServiceDraft,
 } from '../utils/serviceForms'
 const spaces = ref<Space[]>([])
 const groups = ref<Group[]>([])
@@ -299,7 +301,10 @@ function openService(service?: Service) {
   serviceEditorTitle.value = service ? '编辑服务' : '添加服务'
   const monitor = service ? serviceHttpMonitor(monitors.value, service.id) : undefined
   const certMonitor = service ? serviceCertMonitor(monitors.value, service.id) : undefined
-  serviceForm.value = service ? serviceToInput(service, monitor, certMonitor) : emptyService()
+  const dockerMonitor = service ? serviceDockerMonitor(monitors.value, service.id) : undefined
+  serviceForm.value = service
+    ? serviceToInput(service, monitor, certMonitor, dockerMonitor)
+    : emptyService()
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
   serviceModal.value = true
 }
@@ -309,7 +314,8 @@ function cloneService(service: Service) {
   serviceEditorTitle.value = `克隆 ${service.name}`
   const monitor = serviceHttpMonitor(monitors.value, service.id)
   const certMonitor = serviceCertMonitor(monitors.value, service.id)
-  serviceForm.value = serviceToInput(service, monitor, certMonitor)
+  const dockerMonitor = serviceDockerMonitor(monitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor, certMonitor, dockerMonitor)
   serviceForm.value.name = `${service.name} 副本`
   serviceForm.value.sort_order = service.sort_order + 1
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
@@ -317,7 +323,8 @@ function cloneService(service: Service) {
 }
 
 async function saveService() {
-  if (!serviceForm.value.name.trim()) return message.warning('请填写服务名称')
+  const validation = validateServiceDraft(serviceForm.value, httpMonitor.value)
+  if (validation) return message.warning(validation)
   const input = {
     ...cleanServiceInput(serviceForm.value),
     monitor: serviceForm.value.create_monitor ? httpMonitor.value : null,

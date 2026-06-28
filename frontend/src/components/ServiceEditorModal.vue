@@ -89,6 +89,12 @@ const monitorUrl = computed(() => {
 const canNotifyCertificate = computed(() =>
   monitorUrl.value.trim().toLowerCase().startsWith('https://'),
 )
+const hasStatusTarget = computed(
+  () => form.value.create_monitor || dockerEnabled.value || form.value.cert_expiry_notify,
+)
+const channelOptions = computed(() =>
+  notificationChannels.value.map((item) => ({ label: item.name, value: item.id })),
+)
 
 watch(show, async (value) => {
   if (!value) return
@@ -103,6 +109,8 @@ watch(show, async (value) => {
     dockerApi.endpoints(),
     notificationsApi.channels(),
   ])
+  form.value.status_notify_enabled ??= monitor.value.notify_enabled
+  form.value.status_notification_channel_ids ??= [...monitor.value.notification_channel_ids]
   applyDefaultNotification()
 })
 
@@ -223,10 +231,10 @@ function applyDefaultNotification() {
   monitor.value.notify_on_down = true
   monitor.value.notify_on_recovery = true
   monitor.value.notify_on_warning = true
-  if (props.editing || notificationChannels.value.length !== 1 || monitor.value.notify_enabled)
+  if (props.editing || notificationChannels.value.length !== 1 || form.value.status_notify_enabled)
     return
-  monitor.value.notify_enabled = true
-  monitor.value.notification_channel_ids = [notificationChannels.value[0].id]
+  form.value.status_notify_enabled = true
+  form.value.status_notification_channel_ids = [notificationChannels.value[0].id]
 }
 </script>
 
@@ -290,8 +298,6 @@ function applyDefaultNotification() {
           v-model="monitor"
           :services="[]"
           :show-identity="false"
-          show-notification
-          :notification-channels="notificationChannels"
           :allowed-types="['http', 'http_keyword']"
         />
         <label v-if="form.create_monitor" class="cert-toggle" :class="{ disabled: !canNotifyCertificate }">
@@ -299,6 +305,21 @@ function applyDefaultNotification() {
           HTTPS 证书到期时通知
           <small>提前天数在设置中统一配置</small>
         </label>
+      </NCard>
+
+      <NCard v-if="hasStatusTarget" size="small" class="option-card">
+        <template #header><span class="option-title"><NIcon :component="HeartRateMonitor" />状态通知</span></template>
+        <template #header-extra><NSwitch v-model:value="form.status_notify_enabled" /></template>
+        <NFormItem v-if="form.status_notify_enabled" label="通知通道">
+          <NSelect
+            v-model:value="form.status_notification_channel_ids"
+            :options="channelOptions"
+            multiple
+            filterable
+            placeholder="选择通知通道"
+          />
+        </NFormItem>
+        <small class="docker-note">状态通知会同步到该服务的 HTTP、Docker 和证书自动监控。</small>
       </NCard>
 
       <div class="footer-row">

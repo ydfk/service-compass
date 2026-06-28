@@ -30,9 +30,11 @@ import {
   emptyService,
   monitorToInput,
   serviceCertMonitor,
+  serviceDockerMonitor,
   serviceHttpMonitor,
   serviceToInput,
   UNGROUPED_ID,
+  validateServiceDraft,
 } from '../utils/serviceForms'
 
 const dashboard = useDashboardStore()
@@ -111,7 +113,8 @@ async function openEditor(service: Service) {
   editorTitle.value = '编辑服务'
   const monitor = serviceHttpMonitor(editorMonitors.value, service.id)
   const certMonitor = serviceCertMonitor(editorMonitors.value, service.id)
-  serviceForm.value = serviceToInput(service, monitor, certMonitor)
+  const dockerMonitor = serviceDockerMonitor(editorMonitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor, certMonitor, dockerMonitor)
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
   editorShow.value = true
 }
@@ -133,7 +136,8 @@ async function openClone(service: Service) {
   editorTitle.value = `克隆 ${service.name}`
   const monitor = serviceHttpMonitor(editorMonitors.value, service.id)
   const certMonitor = serviceCertMonitor(editorMonitors.value, service.id)
-  serviceForm.value = serviceToInput(service, monitor, certMonitor)
+  const dockerMonitor = serviceDockerMonitor(editorMonitors.value, service.id)
+  serviceForm.value = serviceToInput(service, monitor, certMonitor, dockerMonitor)
   serviceForm.value.name = `${service.name} 副本`
   serviceForm.value.sort_order = service.sort_order + 1
   httpMonitor.value = monitor ? monitorToInput(monitor) : emptyHttpMonitor()
@@ -141,13 +145,9 @@ async function openClone(service: Service) {
 }
 
 async function saveService() {
-  if (!serviceForm.value.name.trim()) return
-  if (
-    serviceForm.value.create_monitor &&
-    httpMonitor.value.monitor_type === 'http_keyword' &&
-    !httpMonitor.value.keyword?.trim()
-  ) {
-    message.warning('HTTP 关键字监控需要填写响应关键字，或切换为普通 HTTP')
+  const validation = validateServiceDraft(serviceForm.value, httpMonitor.value)
+  if (validation) {
+    message.warning(validation)
     return
   }
   const input = {
@@ -268,6 +268,15 @@ onUnmounted(() => {
   <div class="dashboard-shell">
     <header class="topbar">
       <RouterLink class="brand" to="/"><img src="../assets/logo.svg" alt="" /><span><strong>ServiceCompass</strong><small>{{ total }} 个服务 · {{ online }} 在线</small></span></RouterLink>
+      <div class="dashboard-search">
+        <NInput
+          v-model:value="dashboardSearch"
+          clearable
+          placeholder="搜索服务、地址、Docker、空间或分组"
+        >
+          <template #prefix><NIcon :component="Search" /></template>
+        </NInput>
+      </div>
       <div class="header-actions">
         <UrlSwitcher :mode="mode" @change="setMode" />
         <ThemeToggle />
@@ -282,15 +291,6 @@ onUnmounted(() => {
     <main>
       <NSpin :show="loading">
         <NEmpty v-if="!loading && total === 0" description="还没有服务，登录管理端添加第一个服务" />
-        <div class="dashboard-tools">
-          <NInput
-            v-model:value="dashboardSearch"
-            clearable
-            placeholder="搜索服务、说明、地址、Docker、空间或分组"
-          >
-            <template #prefix><NIcon :component="Search" /></template>
-          </NInput>
-        </div>
         <nav v-if="visibleSpaces.length > 1" class="space-tabs" aria-label="空间切换">
           <button
             v-for="space in visibleSpaces"
@@ -348,10 +348,10 @@ onUnmounted(() => {
 .topbar { display: flex; min-height: 4.6rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgb(148 163 184 / 10%); }
 .brand { display: flex; flex: 0 0 auto; align-items: center; gap: 0.7rem; color: inherit; text-decoration: none; }
 .brand img { width: 2.2rem; }.brand span { display: grid; }.brand strong { font-family: "IBM Plex Mono", monospace; font-size: 0.86rem; }.brand small { color: var(--sc-muted); font-size: 0.66rem; }
+.dashboard-search { flex: 1 1 28rem; max-width: 38rem; min-width: 16rem; }
 .header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
 .header-actions a { text-decoration: none; }
 main { padding-top: 0.4rem; }
-.dashboard-tools { display: flex; width: min(36rem, 100%); margin: 1rem 0 0.2rem; }
 .space-tabs { display: inline-flex; max-width: 100%; gap: 0.35rem; margin: 1rem 0 0.4rem; padding: 0.28rem; overflow-x: auto; border: 1px solid rgb(148 163 184 / 12%); border-radius: 999px; background: rgb(15 23 42 / 36%); backdrop-filter: blur(12px); }
 .space-tabs button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; padding: 0.42rem 0.75rem; border: 0; border-radius: 999px; background: transparent; color: var(--sc-muted); cursor: pointer; font-size: 0.82rem; transition: background 160ms ease, color 160ms ease; }
 .space-tabs button:hover { color: var(--sc-text); }
@@ -361,5 +361,5 @@ main { padding-top: 0.4rem; }
 .group-wrapper.draggable { cursor: grab; }
 .group-wrapper.draggable :deep(.group-section > header) { padding-left: 0.6rem; border-left: 2px solid rgb(96 165 250 / 45%); }
 .group-wrapper.dragging { opacity: 0.45; }
-@media (max-width: 760px) { .dashboard-shell { padding-inline: 0.8rem; } .topbar { align-items: flex-start; flex-direction: column; padding: 0.9rem 0; } .header-actions { width: 100%; justify-content: flex-start; } }
+@media (max-width: 760px) { .dashboard-shell { padding-inline: 0.8rem; } .topbar { align-items: flex-start; flex-direction: column; padding: 0.9rem 0; } .dashboard-search, .header-actions { width: 100%; max-width: none; } .header-actions { justify-content: flex-start; } }
 </style>

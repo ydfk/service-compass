@@ -1,14 +1,22 @@
+import type { BackupRun } from '../types'
 import { api } from './client'
 
 export interface BackupConfig {
   enabled: boolean
   schedule_time: string
-  target_type: 'local' | 'webdav'
+  target_type: 'local' | 'webdav' | 'aliyun_oss'
   local_dir?: string | null
   webdav_url?: string | null
   webdav_username?: string | null
   webdav_password?: string | null
   has_webdav_password?: boolean
+  aliyun_oss_endpoint?: string | null
+  aliyun_oss_region?: string | null
+  aliyun_oss_bucket?: string | null
+  aliyun_oss_prefix?: string | null
+  aliyun_oss_access_key_id?: string | null
+  aliyun_oss_access_key_secret?: string | null
+  has_aliyun_oss_access_key_secret?: boolean
   retention_count: number
   last_run_at?: string | null
 }
@@ -16,6 +24,11 @@ export interface BackupConfig {
 export interface IconLocalizeResult {
   success: number
   failed: Array<{ service_id: string; reason: string }>
+}
+
+export interface BackupRunsPage {
+  items: BackupRun[]
+  total: number
 }
 
 export const maintenanceApi = {
@@ -27,6 +40,13 @@ export const maintenanceApi = {
     }),
   runBackup: () =>
     api<{ ok: boolean; path: string }>('/api/maintenance/backup/run', { method: 'POST' }),
+  testBackupTarget: (input: BackupConfig) =>
+    api<{ ok: boolean; path: string }>('/api/maintenance/backup/test-target', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  backupRuns: (page = 1, pageSize = 20) =>
+    api<BackupRunsPage>(`/api/maintenance/backup-runs?page=${page}&page_size=${pageSize}`),
   localizeIcons: () =>
     api<IconLocalizeResult>('/api/maintenance/icons/localize', { method: 'POST' }),
   importConfig: (file: File) => {

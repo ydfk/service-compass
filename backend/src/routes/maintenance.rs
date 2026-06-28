@@ -1,7 +1,7 @@
 use axum::{
     Json, Router,
     body::Body,
-    extract::{Multipart, State},
+    extract::{Multipart, Query, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -23,6 +23,22 @@ struct IconRow {
     icon_value: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct RunsQuery {
+    #[serde(default = "default_page")]
+    page: i64,
+    #[serde(default = "default_page_size")]
+    page_size: i64,
+}
+
+const fn default_page() -> i64 {
+    1
+}
+
+const fn default_page_size() -> i64 {
+    20
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/maintenance/export", get(export_config))
@@ -33,6 +49,11 @@ pub fn router() -> Router<AppState> {
             get(backup_config).put(update_backup_config),
         )
         .route("/api/maintenance/backup/run", post(run_backup))
+        .route(
+            "/api/maintenance/backup/test-target",
+            post(test_backup_target),
+        )
+        .route("/api/maintenance/backup-runs", get(backup_runs))
 }
 
 async fn export_config(State(state): State<AppState>) -> AppResult<Response> {
@@ -125,4 +146,21 @@ async fn update_backup_config(
 async fn run_backup(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
     let path = backup::run_now(&state).await?;
     Ok(Json(serde_json::json!({ "ok": true, "path": path })))
+}
+
+async fn test_backup_target(
+    State(state): State<AppState>,
+    Json(input): Json<backup::BackupConfigInput>,
+) -> AppResult<Json<serde_json::Value>> {
+    let path = backup::test_target(&state, input).await?;
+    Ok(Json(serde_json::json!({ "ok": true, "path": path })))
+}
+
+async fn backup_runs(
+    State(state): State<AppState>,
+    Query(query): Query<RunsQuery>,
+) -> AppResult<Json<backup::BackupRunsPage>> {
+    Ok(Json(
+        backup::list_runs(&state, query.page, query.page_size).await?,
+    ))
 }

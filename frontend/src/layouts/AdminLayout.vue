@@ -3,6 +3,7 @@ import {
   Bell,
   BrandDocker,
   Dashboard,
+  Database,
   FileText,
   HeartRateMonitor,
   Logout,
@@ -44,6 +45,7 @@ const menus: MenuOption[] = [
     icon: () => h(NIcon, null, { default: () => h(Settings) }),
     children: [
       item('常规与账号', '/admin/settings', Settings),
+      item('备份', '/admin/settings/backup', Database),
       item('系统日志', '/admin/settings/logs', FileText),
     ],
   },

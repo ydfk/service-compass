@@ -4,6 +4,7 @@ import {
   NAlert,
   NButton,
   NCard,
+  NDataTable,
   NForm,
   NFormItem,
   NIcon,
@@ -12,9 +13,12 @@ import {
   NSelect,
   NSwitch,
   useMessage,
+  type DataTableColumns,
+  type PaginationProps,
 } from 'naive-ui'
 import { onMounted, reactive, ref } from 'vue'
 import { maintenanceApi, type BackupConfig } from '../api/maintenance'
+import type { BackupRun } from '../types'
 
 const backup = reactive<BackupConfig>({
   enabled: false,
@@ -24,22 +28,81 @@ const backup = reactive<BackupConfig>({
   webdav_url: '',
   webdav_username: '',
   webdav_password: '',
+  aliyun_oss_endpoint: '',
+  aliyun_oss_region: '',
+  aliyun_oss_bucket: '',
+  aliyun_oss_prefix: '',
+  aliyun_oss_access_key_id: '',
+  aliyun_oss_access_key_secret: '',
   retention_count: 7,
 })
+const runs = ref<BackupRun[]>([])
 const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const message = useMessage()
+const pagination = reactive<PaginationProps>({
+  page: 1,
+  pageSize: 20,
+  itemCount: 0,
+  onChange: (page: number) => {
+    pagination.page = page
+    void loadRuns()
+  },
+})
+const runColumns: DataTableColumns<BackupRun> = [
+  { title: '类型', key: 'run_type', render: (row) => runType(row.run_type) },
+  { title: '目标', key: 'target_type', render: (row) => targetType(row.target_type) },
+  { title: '状态', key: 'status', render: (row) => statusText(row.status) },
+  {
+    title: '文件 / 地址',
+    key: 'filename',
+    ellipsis: { tooltip: true },
+    render: (row) => row.filename || '—',
+  },
+  {
+    title: '时间（本地）',
+    key: 'started_at',
+    render: (row) => new Date(row.started_at).toLocaleString(),
+  },
+  {
+    title: '结果',
+    key: 'result',
+    ellipsis: { tooltip: true },
+    render: (row) =>
+      [
+        row.http_status_code ? `HTTP ${row.http_status_code}` : '',
+        row.error_message || row.response_summary || '',
+      ]
+        .filter(Boolean)
+        .join(' · ') || '—',
+  },
+]
 
 async function load() {
   const config = await maintenanceApi.backupConfig()
-  Object.assign(backup, { ...config, webdav_password: '' })
+  Object.assign(backup, {
+    ...config,
+    webdav_password: '',
+    aliyun_oss_access_key_secret: '',
+  })
+  await loadRuns()
+}
+
+async function loadRuns() {
+  const page = await maintenanceApi.backupRuns(pagination.page || 1, pagination.pageSize || 20)
+  runs.value = page.items
+  pagination.itemCount = page.total
 }
 
 async function saveBackupConfig() {
   loading.value = true
   try {
     const config = await maintenanceApi.updateBackupConfig(backup)
-    Object.assign(backup, { ...config, webdav_password: '' })
+    Object.assign(backup, {
+      ...config,
+      webdav_password: '',
+      aliyun_oss_access_key_secret: '',
+    })
     message.success('备份计划已保存')
   } finally {
     loading.value = false
@@ -52,6 +115,17 @@ async function runBackup() {
     const result = await maintenanceApi.runBackup()
     message.success(`备份已完成：${result.path}`)
     await load()
+  } finally {
+    loading.value = false
+  }
+}
+
+async function testBackupTarget() {
+  loading.value = true
+  try {
+    const result = await maintenanceApi.testBackupTarget(backup)
+    message.success(`备份目标可用：${result.path}`)
+    await loadRuns()
   } finally {
     loading.value = false
   }
@@ -91,6 +165,33 @@ async function importConfig(event: Event) {
   }
 }
 
+function targetType(value: string) {
+  const labels: Record<string, string> = {
+    local: '本地目录',
+    webdav: 'WebDAV',
+    aliyun_oss: '阿里云 OSS',
+  }
+  return labels[value] || value
+}
+
+function runType(value: string) {
+  const labels: Record<string, string> = {
+    manual: '手动',
+    scheduled: '计划',
+    test: '测试',
+  }
+  return labels[value] || value
+}
+
+function statusText(value: string) {
+  const labels: Record<string, string> = {
+    running: '运行中',
+    success: '成功',
+    failed: '失败',
+  }
+  return labels[value] || value
+}
+
 onMounted(load)
 </script>
 
@@ -123,10 +224,11 @@ onMounted(load)
         <NFormItem label="备份目标">
           <NSelect
             v-model:value="backup.target_type"
-            :options="[
-              { label: '本地目录', value: 'local' },
-              { label: 'WebDAV', value: 'webdav' },
-            ]"
+          :options="[
+            { label: '本地目录', value: 'local' },
+            { label: 'WebDAV', value: 'webdav' },
+            { label: '阿里云 OSS', value: 'aliyun_oss' },
+          ]"
           />
         </NFormItem>
         <NFormItem label="保留份数">
@@ -135,9 +237,9 @@ onMounted(load)
         <NFormItem v-if="backup.target_type === 'local'" label="本地备份目录" class="span-2">
           <NInput v-model:value="backup.local_dir" placeholder="/data/backups 或宿主机挂载目录" />
         </NFormItem>
-        <template v-else>
+        <template v-else-if="backup.target_type === 'webdav'">
           <NFormItem label="WebDAV 地址" class="span-2">
-            <NInput v-model:value="backup.webdav_url" placeholder="https://dav.example.com/service-compass" />
+            <NInput v-model:value="backup.webdav_url" placeholder="目录地址，例如 https://dav.example.com/dav/service-compass" />
           </NFormItem>
           <NFormItem label="WebDAV 用户名">
             <NInput v-model:value="backup.webdav_username" placeholder="用户名" />
@@ -151,14 +253,50 @@ onMounted(load)
             />
           </NFormItem>
         </template>
+        <template v-else>
+          <NFormItem label="OSS Endpoint">
+            <NInput v-model:value="backup.aliyun_oss_endpoint" placeholder="https://s3.oss-cn-hangzhou.aliyuncs.com" />
+          </NFormItem>
+          <NFormItem label="Region">
+            <NInput v-model:value="backup.aliyun_oss_region" placeholder="oss-cn-hangzhou" />
+          </NFormItem>
+          <NFormItem label="Bucket">
+            <NInput v-model:value="backup.aliyun_oss_bucket" placeholder="service-compass-backup" />
+          </NFormItem>
+          <NFormItem label="对象前缀">
+            <NInput v-model:value="backup.aliyun_oss_prefix" placeholder="service-compass/" />
+          </NFormItem>
+          <NFormItem label="AccessKey ID">
+            <NInput v-model:value="backup.aliyun_oss_access_key_id" placeholder="AccessKey ID" />
+          </NFormItem>
+          <NFormItem label="AccessKey Secret">
+            <NInput
+              v-model:value="backup.aliyun_oss_access_key_secret"
+              type="password"
+              show-password-on="click"
+              :placeholder="backup.has_aliyun_oss_access_key_secret ? '留空则保留现有 Secret' : 'AccessKey Secret'"
+            />
+          </NFormItem>
+        </template>
       </div>
       <div class="backup-actions">
         <NButton type="primary" :loading="loading" @click="saveBackupConfig">保存备份计划</NButton>
+        <NButton type="info" secondary :loading="loading" @click="testBackupTarget">测试目标</NButton>
         <NButton type="success" secondary :loading="loading" @click="runBackup">
           <template #icon><NIcon :component="Archive" /></template>立即备份
         </NButton>
       </div>
     </NForm>
+  </NCard>
+
+  <NCard title="备份日志" class="maintenance-card">
+    <NDataTable
+      :columns="runColumns"
+      :data="runs"
+      :pagination="pagination"
+      size="small"
+      :row-key="(row: BackupRun) => row.id"
+    />
   </NCard>
 </template>
 

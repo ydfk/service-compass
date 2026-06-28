@@ -14,7 +14,6 @@ import {
 import { onMounted, reactive, ref } from 'vue'
 import { api } from '../api/client'
 import { settingsApi } from '../api/settings'
-import DataMaintenancePanel from '../components/DataMaintenancePanel.vue'
 import { useAuthStore } from '../stores/auth'
 
 const retentionDays = ref(30)
@@ -75,7 +74,6 @@ onMounted(async () => {
       </NForm>
     </NCard>
   </div>
-  <DataMaintenancePanel />
   <NAlert type="info" :bordered="false" class="note">通知凭据和加密密钥不会以明文返回前端。</NAlert>
 </template>
 

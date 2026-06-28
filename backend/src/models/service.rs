@@ -54,6 +54,10 @@ pub struct ServiceInput {
     #[serde(default = "default_monitor_target_mode")]
     pub monitor_target_url_mode: String,
     pub monitor: Option<MonitorInput>,
+    #[serde(default)]
+    pub status_notify_enabled: Option<bool>,
+    #[serde(default)]
+    pub status_notification_channel_ids: Option<Vec<String>>,
 }
 
 fn default_icon_type() -> String {

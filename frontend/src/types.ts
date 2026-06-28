@@ -93,6 +93,8 @@ export interface ServiceInput {
   monitor_type?: 'http' | 'http_keyword'
   monitor_target_url_mode?: 'local' | 'public'
   monitor?: MonitorInput | null
+  status_notify_enabled?: boolean | null
+  status_notification_channel_ids?: string[] | null
 }
 
 export interface Monitor {
@@ -170,6 +172,20 @@ export interface MonitorCheck {
 export interface MonitorNotificationInput {
   notify_enabled: boolean
   notification_channel_ids: string[]
+}
+
+export interface BackupRun {
+  id: string
+  run_type: 'manual' | 'scheduled' | 'test'
+  target_type: string
+  status: 'running' | 'success' | 'failed'
+  filename?: string | null
+  file_size?: number | null
+  started_at: string
+  finished_at?: string | null
+  http_status_code?: number | null
+  response_summary?: string | null
+  error_message?: string | null
 }
 
 export interface DockerEndpoint {

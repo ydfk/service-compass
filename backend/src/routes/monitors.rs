@@ -382,6 +382,10 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
     Ok(())
 }
 
+pub(crate) fn validate_input(input: &MonitorInput) -> AppResult<()> {
+    validate(input)
+}
+
 async fn create_record(state: &AppState, input: &MonitorInput) -> AppResult<String> {
     validate(input)?;
     let id = Uuid::new_v4().to_string();
@@ -532,7 +536,7 @@ async fn sync_notification_rules(
     .await
 }
 
-async fn save_notification_rules(
+pub(crate) async fn save_notification_rules(
     state: &AppState,
     monitor_id: &str,
     enabled: bool,
@@ -566,6 +570,26 @@ async fn save_notification_rules(
         .bind(&now)
         .execute(&state.pool)
         .await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn sync_notification_for_service_monitor(
+    state: &AppState,
+    service_id: &str,
+    monitor_type: &str,
+    enabled: bool,
+    channel_ids: &[String],
+) -> AppResult<()> {
+    let monitor_id: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM monitors WHERE service_id = ? AND monitor_type = ? LIMIT 1",
+    )
+    .bind(service_id)
+    .bind(monitor_type)
+    .fetch_optional(&state.pool)
+    .await?;
+    if let Some(id) = monitor_id {
+        save_notification_rules(state, &id, enabled, channel_ids, true, true, true).await?;
     }
     Ok(())
 }

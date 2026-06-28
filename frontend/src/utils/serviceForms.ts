@@ -17,6 +17,8 @@ export function emptyService(): ServiceInput {
     cert_expiry_notify: false,
     monitor_type: 'http_keyword',
     monitor_target_url_mode: 'public',
+    status_notify_enabled: false,
+    status_notification_channel_ids: [],
   }
 }
 
@@ -102,7 +104,9 @@ export function serviceToInput(
   service: Service,
   monitor?: Monitor,
   certMonitor?: Monitor,
+  dockerMonitor?: Monitor,
 ): ServiceInput {
+  const notifySource = monitor ?? dockerMonitor ?? certMonitor
   return {
     group_id: service.group_id === UNGROUPED_ID ? '' : service.group_id,
     name: service.name,
@@ -123,6 +127,8 @@ export function serviceToInput(
     cert_expiry_notify: Boolean(certMonitor?.enabled),
     monitor_type: monitor?.monitor_type === 'http_keyword' ? 'http_keyword' : 'http',
     monitor_target_url_mode: monitor?.target_url_mode === 'local' ? 'local' : 'public',
+    status_notify_enabled: notifySource?.notify_enabled ?? false,
+    status_notification_channel_ids: notifySource?.notification_channel_ids ?? [],
   }
 }
 
@@ -136,12 +142,55 @@ export function serviceCertMonitor(monitors: Monitor[], serviceId: string) {
   return monitors.find((item) => item.service_id === serviceId && item.monitor_type === 'cert')
 }
 
+export function serviceDockerMonitor(monitors: Monitor[], serviceId: string) {
+  return monitors.find((item) => item.service_id === serviceId && item.monitor_type === 'docker')
+}
+
 export function cleanServiceInput(input: ServiceInput): ServiceInput {
   return {
     ...input,
     local_url: cleanUrl(input.local_url),
     public_url: cleanUrl(input.public_url),
   }
+}
+
+export function validateServiceDraft(input: ServiceInput, monitor: MonitorInput): string | null {
+  if (!input.name.trim()) return '请填写服务名称'
+  const dockerEnabled = Boolean(input.docker_endpoint_id)
+  if (
+    dockerEnabled &&
+    !input.docker_container_id &&
+    !input.docker_name &&
+    !(input.docker_compose_project && input.docker_compose_service)
+  ) {
+    return '关联 Docker 时请选择具体容器'
+  }
+  if (input.create_monitor) {
+    if (monitor.monitor_type === 'http_keyword' && !monitor.keyword?.trim()) {
+      return 'HTTP 关键字监控需要填写响应关键字，或切换为普通 HTTP'
+    }
+    if (monitor.target_url_mode === 'custom' && !monitor.target_url?.trim()) {
+      return '自定义监控地址不能为空'
+    }
+    if (
+      ['local', 'public'].includes(monitor.target_url_mode) &&
+      !input.local_url?.trim() &&
+      !input.public_url?.trim()
+    ) {
+      return '监控使用服务地址时，内网地址或外网地址至少填写一个'
+    }
+    if (monitor.method === 'POST' && monitor.request_headers?.trim()) {
+      try {
+        JSON.parse(monitor.request_headers)
+      } catch {
+        return '请求头必须是合法 JSON'
+      }
+    }
+  }
+  if (input.status_notify_enabled && !input.status_notification_channel_ids?.length) {
+    return '开启状态通知时必须选择通知通道'
+  }
+  return null
 }
 
 function cleanUrl(value?: string | null) {

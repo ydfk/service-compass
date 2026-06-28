@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'monitors', component: () => import('./pages/MonitorsPage.vue') },
         { path: 'notify', component: () => import('./pages/NotificationsPage.vue') },
         { path: 'settings', component: () => import('./pages/SettingsPage.vue') },
+        { path: 'settings/backup', component: () => import('./pages/BackupPage.vue') },
         { path: 'settings/docker', redirect: '/admin/docker' },
         { path: 'settings/logs', component: () => import('./pages/SystemLogsPage.vue') },
       ],
