@@ -6,6 +6,7 @@ export interface SettingsPayload {
   cert_expiry_warning_days: number
   notification_cooldown_sec: number
   dashboard_refresh_interval_sec: number
+  anonymous_access_cidrs: string
 }
 
 export const settingsApi = {

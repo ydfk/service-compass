@@ -41,6 +41,30 @@ async fn login_token(app: &axum::Router) -> String {
     payload["token"].as_str().unwrap().to_owned()
 }
 
+async fn login_cookie(app: &axum::Router) -> String {
+    let login = app
+        .clone()
+        .oneshot(
+            Request::post("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"username":"admin","password":"admin"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login.status(), StatusCode::OK);
+    login
+        .headers()
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned()
+}
+
 #[tokio::test]
 async fn health_is_public() {
     let response = test_app()
@@ -76,6 +100,77 @@ async fn login_creates_an_accepted_session() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn public_content_requires_login_outside_anonymous_networks() {
+    let response = test_app()
+        .await
+        .oneshot(
+            Request::get("/api/dashboard")
+                .header("x-forwarded-for", "8.8.8.8")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn logged_in_external_client_can_read_public_content() {
+    let app = test_app().await;
+    let token = login_token(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::get("/api/dashboard")
+                .header("x-forwarded-for", "8.8.8.8")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn session_cookie_can_read_public_content_from_external_client() {
+    let app = test_app().await;
+    let cookie = login_cookie(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::get("/api/dashboard")
+                .header("x-forwarded-for", "8.8.8.8")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn settings_reject_invalid_anonymous_networks() {
+    let app = test_app().await;
+    let token = login_token(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::put("/api/settings")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"retention_days":30,"log_retention_days":30,"cert_expiry_warning_days":30,"notification_cooldown_sec":300,"dashboard_refresh_interval_sec":30,"anonymous_access_cidrs":"192.168.1.0/33"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

@@ -3,8 +3,8 @@ import { ArrowsSort, LayoutGrid, ListDetails, Login, Search, Settings } from '@v
 import { NButton, NButtonGroup, NEmpty, NIcon, NInput, NSpin, useMessage } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
-import { api } from '../api/client'
+import { RouterLink, useRouter } from 'vue-router'
+import { ApiError, api } from '../api/client'
 import { groupsApi } from '../api/groups'
 import { monitorsApi } from '../api/monitors'
 import { servicesApi } from '../api/services'
@@ -39,6 +39,7 @@ import {
 
 const dashboard = useDashboardStore()
 const auth = useAuthStore()
+const router = useRouter()
 const { spaces, groups, loading } = storeToRefs(dashboard)
 const mode = ref<UrlMode>((localStorage.getItem('service-compass-url-mode') as UrlMode) || 'public')
 const cardMode = ref<'compact' | 'detail'>(
@@ -255,8 +256,17 @@ async function loadVersion() {
 }
 
 onMounted(async () => {
-  await Promise.all([dashboard.load(), auth.verify(), loadVersion()])
-  dashboard.startAutoRefresh()
+  const authenticated = await auth.verify()
+  try {
+    await Promise.all([dashboard.load(), loadVersion()])
+    dashboard.startAutoRefresh()
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401 && !authenticated) {
+      await router.replace({ path: '/login', query: { redirect: '/' } })
+      return
+    }
+    throw error
+  }
 })
 
 onUnmounted(() => {

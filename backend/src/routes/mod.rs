@@ -18,6 +18,10 @@ pub fn public() -> Router<AppState> {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/auth/login", axum::routing::post(auth::login))
+}
+
+pub fn public_content() -> Router<AppState> {
+    Router::new()
         .merge(dashboard::router())
         .merge(icons::public_router())
 }

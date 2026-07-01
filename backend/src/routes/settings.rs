@@ -3,6 +3,7 @@ use chrono::Utc;
 use serde::Deserialize;
 
 use crate::{
+    access,
     error::{AppError, AppResult},
     logs,
     state::AppState,
@@ -17,6 +18,8 @@ struct SettingsInput {
     notification_cooldown_sec: i64,
     #[serde(default = "default_dashboard_refresh_interval")]
     dashboard_refresh_interval_sec: i64,
+    #[serde(default = "default_anonymous_access_cidrs")]
+    anonymous_access_cidrs: String,
 }
 
 const fn default_retention_days() -> i64 {
@@ -25,6 +28,10 @@ const fn default_retention_days() -> i64 {
 
 const fn default_dashboard_refresh_interval() -> i64 {
     30
+}
+
+fn default_anonymous_access_cidrs() -> String {
+    access::DEFAULT_ANONYMOUS_CIDRS.to_owned()
 }
 
 pub fn router() -> Router<AppState> {
@@ -38,12 +45,19 @@ async fn get_settings(State(state): State<AppState>) -> AppResult<Json<serde_jso
     let notification_cooldown_sec = setting_i64(&state, "notification_cooldown_sec", 300).await?;
     let dashboard_refresh_interval_sec =
         setting_i64(&state, "dashboard_refresh_interval_sec", 30).await?;
+    let anonymous_access_cidrs = setting_string(
+        &state,
+        "anonymous_access_cidrs",
+        access::DEFAULT_ANONYMOUS_CIDRS,
+    )
+    .await?;
     Ok(Json(serde_json::json!({
         "retention_days": retention_days,
         "log_retention_days": log_retention_days,
         "cert_expiry_warning_days": cert_expiry_warning_days,
         "notification_cooldown_sec": notification_cooldown_sec,
-        "dashboard_refresh_interval_sec": dashboard_refresh_interval_sec
+        "dashboard_refresh_interval_sec": dashboard_refresh_interval_sec,
+        "anonymous_access_cidrs": anonymous_access_cidrs
     })))
 }
 
@@ -76,6 +90,7 @@ async fn update_settings(
             "首页刷新间隔必须在 5 到 3600 秒之间".into(),
         ));
     }
+    access::validate_cidrs(&input.anonymous_access_cidrs)?;
     save_setting(&state, "retention_days", input.retention_days).await?;
     save_setting(&state, "log_retention_days", input.log_retention_days).await?;
     save_setting(
@@ -96,6 +111,12 @@ async fn update_settings(
         input.dashboard_refresh_interval_sec,
     )
     .await?;
+    save_setting_string(
+        &state,
+        "anonymous_access_cidrs",
+        &input.anonymous_access_cidrs,
+    )
+    .await?;
     sync_existing_values(&state, &input).await?;
     logs::set_retention_days(input.log_retention_days)
         .map_err(|error| AppError::Internal(error.into()))?;
@@ -104,7 +125,8 @@ async fn update_settings(
         "log_retention_days": input.log_retention_days,
         "cert_expiry_warning_days": input.cert_expiry_warning_days,
         "notification_cooldown_sec": input.notification_cooldown_sec,
-        "dashboard_refresh_interval_sec": input.dashboard_refresh_interval_sec
+        "dashboard_refresh_interval_sec": input.dashboard_refresh_interval_sec,
+        "anonymous_access_cidrs": input.anonymous_access_cidrs
     })))
 }
 
@@ -135,13 +157,25 @@ async fn setting_i64(state: &AppState, key: &str, fallback: i64) -> AppResult<i6
         .unwrap_or(fallback))
 }
 
+async fn setting_string(state: &AppState, key: &str, fallback: &str) -> AppResult<String> {
+    let value: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+        .bind(key)
+        .fetch_optional(&state.pool)
+        .await?;
+    Ok(value.unwrap_or_else(|| fallback.to_owned()))
+}
+
 async fn save_setting(state: &AppState, key: &str, value: i64) -> AppResult<()> {
+    save_setting_string(state, key, &value.to_string()).await
+}
+
+async fn save_setting_string(state: &AppState, key: &str, value: &str) -> AppResult<()> {
     sqlx::query(
         "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) \
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
     )
     .bind(key)
-    .bind(value.to_string())
+    .bind(value.trim())
     .bind(Utc::now().to_rfc3339())
     .execute(&state.pool)
     .await?;

@@ -1,3 +1,4 @@
+pub mod access;
 pub mod auth;
 pub mod config;
 pub mod crypto;
@@ -23,6 +24,10 @@ use tower_http::{
 };
 
 pub fn app(state: AppState, static_dir: &Path) -> Router {
+    let public_content = routes::public_content().route_layer(middleware::from_fn_with_state(
+        state.clone(),
+        auth::allow_private_network_or_auth,
+    ));
     let protected = routes::protected().route_layer(middleware::from_fn_with_state(
         state.clone(),
         auth::require_auth,
@@ -32,6 +37,7 @@ pub fn app(state: AppState, static_dir: &Path) -> Router {
 
     Router::new()
         .merge(routes::public())
+        .merge(public_content)
         .merge(protected)
         .fallback_service(static_files)
         .layer(TraceLayer::new_for_http())

@@ -21,6 +21,7 @@ const logRetentionDays = ref(30)
 const certExpiryWarningDays = ref(30)
 const notificationCooldownSec = ref(300)
 const dashboardRefreshIntervalSec = ref(30)
+const anonymousAccessCidrs = ref('')
 const credentials = reactive({ current_password: '', username: '', new_password: '' })
 const message = useMessage()
 const auth = useAuthStore()
@@ -32,6 +33,7 @@ async function save() {
     cert_expiry_warning_days: certExpiryWarningDays.value,
     notification_cooldown_sec: notificationCooldownSec.value,
     dashboard_refresh_interval_sec: dashboardRefreshIntervalSec.value,
+    anonymous_access_cidrs: anonymousAccessCidrs.value,
   })
   message.success('设置已保存')
 }
@@ -50,6 +52,7 @@ onMounted(async () => {
   certExpiryWarningDays.value = settings.cert_expiry_warning_days
   notificationCooldownSec.value = settings.notification_cooldown_sec
   dashboardRefreshIntervalSec.value = settings.dashboard_refresh_interval_sec
+  anonymousAccessCidrs.value = settings.anonymous_access_cidrs
   credentials.username = auth.username || (await api<{ username: string }>('/api/auth/me')).username
 })
 </script>
@@ -63,6 +66,14 @@ onMounted(async () => {
       <NFormItem label="证书到期提醒提前天数"><NInputNumber v-model:value="certExpiryWarningDays" :min="1" :max="365" /></NFormItem>
       <NFormItem label="通知冷却时间（秒）"><NInputNumber v-model:value="notificationCooldownSec" :min="0" :max="86400" /></NFormItem>
       <NFormItem label="首页自动刷新间隔（秒）"><NInputNumber v-model:value="dashboardRefreshIntervalSec" :min="5" :max="3600" /></NFormItem>
+      <NFormItem label="允许匿名访问的内网网段">
+        <NInput
+          v-model:value="anonymousAccessCidrs"
+          type="textarea"
+          :autosize="{ minRows: 6, maxRows: 10 }"
+          placeholder="每行一个网段，例如 192.168.1.0/24。留空表示所有来源都必须登录。"
+        />
+      </NFormItem>
       <NButton type="primary" @click="save"><template #icon><NIcon :component="DeviceFloppy" /></template>保存设置</NButton>
     </NCard>
     <NCard title="管理员账号">
@@ -74,7 +85,7 @@ onMounted(async () => {
       </NForm>
     </NCard>
   </div>
-  <NAlert type="info" :bordered="false" class="note">通知凭据和加密密钥不会以明文返回前端。</NAlert>
+  <NAlert type="info" :bordered="false" class="note">非上述网段访问时，首页数据和管理内容都必须登录后查看。通知凭据和加密密钥不会以明文返回前端。</NAlert>
 </template>
 
 <style scoped>

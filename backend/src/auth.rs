@@ -5,14 +5,15 @@ use argon2::{
 use axum::{
     Json,
     extract::{Request, State},
-    http::header::AUTHORIZATION,
+    http::header::{AUTHORIZATION, SET_COOKIE},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    access,
     error::{AppError, AppResult},
     state::AppState,
 };
@@ -39,7 +40,7 @@ pub struct CredentialsRequest {
 pub async fn login(
     State(state): State<AppState>,
     Json(input): Json<LoginRequest>,
-) -> AppResult<Json<SessionResponse>> {
+) -> AppResult<impl IntoResponse> {
     let row: Option<(String, String)> =
         sqlx::query_as("SELECT username, password_hash FROM admin_users WHERE id = 1")
             .fetch_optional(&state.pool)
@@ -54,7 +55,10 @@ pub async fn login(
     let token = Uuid::new_v4().to_string();
     state.sessions.write().await.insert(token.clone());
     tracing::info!(username, "管理员登录成功");
-    Ok(Json(SessionResponse { token, username }))
+    Ok((
+        [(SET_COOKIE, session_cookie(&token))],
+        Json(SessionResponse { token, username }),
+    ))
 }
 
 pub async fn me(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
@@ -100,32 +104,79 @@ pub async fn update_credentials(
 pub async fn logout(
     State(state): State<AppState>,
     request: Request,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<impl IntoResponse> {
     if let Some(token) = bearer_token(&request) {
         state.sessions.write().await.remove(token);
     }
-    Ok(Json(serde_json::json!({ "ok": true })))
+    Ok((
+        [(SET_COOKIE, clear_session_cookie())],
+        Json(serde_json::json!({ "ok": true })),
+    ))
 }
 
-pub async fn require_auth(
+pub async fn require_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    if is_token_authenticated(&state, bearer_token_owned(&request)).await {
+        return next.run(request).await;
+    }
+    AppError::Unauthorized.into_response()
+}
+
+pub async fn allow_private_network_or_auth(
     State(state): State<AppState>,
     request: Request,
     next: Next,
-) -> AppResult<Response> {
-    let token = bearer_token(&request).ok_or(AppError::Unauthorized)?;
-    if !state.sessions.read().await.contains(token) {
-        return Err(AppError::Unauthorized);
+) -> Response {
+    let client_ip = access::client_ip(&request);
+    let token = bearer_token_owned(&request);
+    match access::is_anonymous_allowed_for_ip(&state, client_ip).await {
+        Ok(true) => next.run(request).await,
+        Ok(false) if is_token_authenticated(&state, token).await => next.run(request).await,
+        Ok(false) => AppError::Unauthorized.into_response(),
+        Err(error) => error.into_response(),
     }
-    Ok(next.run(request).await)
+}
+
+async fn is_token_authenticated(state: &AppState, token: Option<String>) -> bool {
+    let Some(token) = token else {
+        return false;
+    };
+    state.sessions.read().await.contains(&token)
+}
+
+fn bearer_token_owned(request: &Request) -> Option<String> {
+    bearer_token(request).map(ToOwned::to_owned)
 }
 
 fn bearer_token(request: &Request) -> Option<&str> {
+    request_bearer_token(request).or_else(|| cookie_token(request))
+}
+
+fn request_bearer_token(request: &Request) -> Option<&str> {
     request
         .headers()
         .get(AUTHORIZATION)?
         .to_str()
         .ok()?
         .strip_prefix("Bearer ")
+}
+
+fn cookie_token(request: &Request) -> Option<&str> {
+    request
+        .headers()
+        .get("cookie")?
+        .to_str()
+        .ok()?
+        .split(';')
+        .map(str::trim)
+        .find_map(|item| item.strip_prefix("service-compass-session="))
+}
+
+fn session_cookie(token: &str) -> String {
+    format!("service-compass-session={token}; Path=/; HttpOnly; SameSite=Lax")
+}
+
+fn clear_session_cookie() -> String {
+    "service-compass-session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0".into()
 }
 
 pub fn hash_password(password: &str) -> anyhow::Result<String> {
