@@ -1,6 +1,7 @@
 pub mod cert;
 pub mod dns;
 pub mod docker;
+pub mod history;
 pub mod http;
 pub mod postgres;
 pub mod scheduler;

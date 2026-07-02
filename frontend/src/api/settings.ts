@@ -3,6 +3,7 @@ import { api } from './client'
 export interface SettingsPayload {
   retention_days: number
   log_retention_days: number
+  monitor_checks_max_per_monitor: number
   cert_expiry_warning_days: number
   notification_cooldown_sec: number
   dashboard_refresh_interval_sec: number

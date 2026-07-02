@@ -14,6 +14,8 @@ struct SettingsInput {
     retention_days: i64,
     #[serde(default = "default_retention_days")]
     log_retention_days: i64,
+    #[serde(default = "default_monitor_checks_max_per_monitor")]
+    monitor_checks_max_per_monitor: i64,
     cert_expiry_warning_days: i64,
     notification_cooldown_sec: i64,
     #[serde(default = "default_dashboard_refresh_interval")]
@@ -24,6 +26,10 @@ struct SettingsInput {
 
 const fn default_retention_days() -> i64 {
     30
+}
+
+const fn default_monitor_checks_max_per_monitor() -> i64 {
+    2000
 }
 
 const fn default_dashboard_refresh_interval() -> i64 {
@@ -41,6 +47,8 @@ pub fn router() -> Router<AppState> {
 async fn get_settings(State(state): State<AppState>) -> AppResult<Json<serde_json::Value>> {
     let retention_days = setting_i64(&state, "retention_days", 30).await?;
     let log_retention_days = setting_i64(&state, "log_retention_days", 30).await?;
+    let monitor_checks_max_per_monitor =
+        setting_i64(&state, "monitor_checks_max_per_monitor", 2000).await?;
     let cert_expiry_warning_days = setting_i64(&state, "cert_expiry_warning_days", 30).await?;
     let notification_cooldown_sec = setting_i64(&state, "notification_cooldown_sec", 300).await?;
     let dashboard_refresh_interval_sec =
@@ -54,6 +62,7 @@ async fn get_settings(State(state): State<AppState>) -> AppResult<Json<serde_jso
     Ok(Json(serde_json::json!({
         "retention_days": retention_days,
         "log_retention_days": log_retention_days,
+        "monitor_checks_max_per_monitor": monitor_checks_max_per_monitor,
         "cert_expiry_warning_days": cert_expiry_warning_days,
         "notification_cooldown_sec": notification_cooldown_sec,
         "dashboard_refresh_interval_sec": dashboard_refresh_interval_sec,
@@ -75,6 +84,11 @@ async fn update_settings(
             "系统日志保留天数必须在 1 到 365 之间".into(),
         ));
     }
+    if !(100..=200_000).contains(&input.monitor_checks_max_per_monitor) {
+        return Err(AppError::Validation(
+            "每个监控保留记录数必须在 100 到 200000 之间".into(),
+        ));
+    }
     if !(1..=365).contains(&input.cert_expiry_warning_days) {
         return Err(AppError::Validation(
             "证书到期提醒天数必须在 1 到 365 之间".into(),
@@ -93,6 +107,12 @@ async fn update_settings(
     access::validate_cidrs(&input.anonymous_access_cidrs)?;
     save_setting(&state, "retention_days", input.retention_days).await?;
     save_setting(&state, "log_retention_days", input.log_retention_days).await?;
+    save_setting(
+        &state,
+        "monitor_checks_max_per_monitor",
+        input.monitor_checks_max_per_monitor,
+    )
+    .await?;
     save_setting(
         &state,
         "cert_expiry_warning_days",
@@ -123,6 +143,7 @@ async fn update_settings(
     Ok(Json(serde_json::json!({
         "retention_days": input.retention_days,
         "log_retention_days": input.log_retention_days,
+        "monitor_checks_max_per_monitor": input.monitor_checks_max_per_monitor,
         "cert_expiry_warning_days": input.cert_expiry_warning_days,
         "notification_cooldown_sec": input.notification_cooldown_sec,
         "dashboard_refresh_interval_sec": input.dashboard_refresh_interval_sec,
@@ -139,11 +160,7 @@ async fn sync_existing_values(state: &AppState, input: &SettingsInput) -> AppRes
         .bind(input.notification_cooldown_sec)
         .execute(&state.pool)
         .await?;
-    let cutoff = (Utc::now() - chrono::Duration::days(input.retention_days.max(1))).to_rfc3339();
-    sqlx::query("DELETE FROM monitor_checks WHERE checked_at < ?")
-        .bind(cutoff)
-        .execute(&state.pool)
-        .await?;
+    crate::monitor::history::cleanup(state, true).await?;
     Ok(())
 }
 

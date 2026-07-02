@@ -174,6 +174,65 @@ async fn settings_reject_invalid_anonymous_networks() {
 }
 
 #[tokio::test]
+async fn settings_cleanup_caps_monitor_checks_per_monitor() {
+    let state = test_state().await;
+    let app = app(state.clone(), Path::new("missing"));
+    let token = login_token(&app).await;
+
+    let created = app
+        .clone()
+        .oneshot(
+            Request::post("/api/monitors")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"service_id":null,"name":"Cleanup Target","monitor_type":"http","target_url":"https://example.com","target_url_mode":"custom","enabled":true}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK);
+    let body = to_bytes(created.into_body(), 4096).await.unwrap();
+    let monitor: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let monitor_id = monitor["id"].as_str().unwrap();
+
+    for index in 0..105 {
+        sqlx::query(
+            "INSERT INTO monitor_checks (id, monitor_id, status, checked_at) VALUES (?, ?, 'up', ?)",
+        )
+        .bind(format!("check-{index:03}"))
+        .bind(monitor_id)
+        .bind(format!("2026-07-02T00:{index:02}:00Z"))
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put("/api/settings")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"retention_days":365,"log_retention_days":30,"monitor_checks_max_per_monitor":100,"cert_expiry_warning_days":30,"notification_cooldown_sec":300,"dashboard_refresh_interval_sec":30,"anonymous_access_cidrs":"127.0.0.1/8"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM monitor_checks WHERE monitor_id = ?")
+        .bind(monitor_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 100);
+}
+
+#[tokio::test]
 async fn service_can_be_created_without_group_and_with_monitor() {
     let app = test_app().await;
     let token = login_token(&app).await;

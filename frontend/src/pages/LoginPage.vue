@@ -18,12 +18,18 @@ async function submit() {
   loading.value = true
   try {
     await auth.login(username.value, password.value)
-    await router.replace((route.query.redirect as string) || '/admin')
+    await router.replace(loginRedirect())
   } catch (error) {
     message.error(error instanceof Error ? error.message : '登录失败')
   } finally {
     loading.value = false
   }
+}
+
+function loginRedirect() {
+  return typeof route.query.redirect === 'string' && route.query.redirect !== '/login'
+    ? route.query.redirect
+    : '/'
 }
 </script>
 

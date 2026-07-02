@@ -9,11 +9,11 @@ pub fn start(state: AppState) {
     tokio::spawn(async move {
         let semaphore = Arc::new(Semaphore::new(20));
         let mut ticker = tokio::time::interval(Duration::from_secs(1));
-        let mut last_cleanup = Utc::now() - ChronoDuration::days(1);
+        let mut last_cleanup = Utc::now() - ChronoDuration::hours(1);
         loop {
             ticker.tick().await;
             dispatch_due(&state, Arc::clone(&semaphore)).await;
-            if Utc::now() - last_cleanup >= ChronoDuration::days(1) {
+            if Utc::now() - last_cleanup >= ChronoDuration::hours(1) {
                 cleanup_history(&state).await;
                 last_cleanup = Utc::now();
             }
@@ -81,20 +81,9 @@ pub async fn run(state: &AppState, monitor: &MonitorRow) -> monitor::CheckResult
 }
 
 async fn cleanup_history(state: &AppState) {
-    let retention_days: i64 = sqlx::query_scalar(
-        "SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'retention_days'",
-    )
-    .fetch_optional(&state.pool)
-    .await
-    .ok()
-    .flatten()
-    .unwrap_or(30);
-    let cutoff = (Utc::now() - ChronoDuration::days(retention_days.max(1))).to_rfc3339();
-    if let Err(error) = sqlx::query("DELETE FROM monitor_checks WHERE checked_at < ?")
-        .bind(cutoff)
-        .execute(&state.pool)
-        .await
-    {
-        tracing::warn!(?error, "清理监控历史失败");
+    match monitor::history::cleanup(state, false).await {
+        Ok(deleted) if deleted > 0 => tracing::info!(deleted, "监控历史清理完成"),
+        Ok(_) => {}
+        Err(error) => tracing::warn!(?error, "清理监控历史失败"),
     }
 }

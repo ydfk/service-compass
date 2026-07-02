@@ -18,6 +18,7 @@ import { useAuthStore } from '../stores/auth'
 
 const retentionDays = ref(30)
 const logRetentionDays = ref(30)
+const monitorChecksMaxPerMonitor = ref(2000)
 const certExpiryWarningDays = ref(30)
 const notificationCooldownSec = ref(300)
 const dashboardRefreshIntervalSec = ref(30)
@@ -30,6 +31,7 @@ async function save() {
   await settingsApi.update({
     retention_days: retentionDays.value,
     log_retention_days: logRetentionDays.value,
+    monitor_checks_max_per_monitor: monitorChecksMaxPerMonitor.value,
     cert_expiry_warning_days: certExpiryWarningDays.value,
     notification_cooldown_sec: notificationCooldownSec.value,
     dashboard_refresh_interval_sec: dashboardRefreshIntervalSec.value,
@@ -49,6 +51,7 @@ onMounted(async () => {
   const settings = await settingsApi.get()
   retentionDays.value = settings.retention_days
   logRetentionDays.value = settings.log_retention_days
+  monitorChecksMaxPerMonitor.value = settings.monitor_checks_max_per_monitor
   certExpiryWarningDays.value = settings.cert_expiry_warning_days
   notificationCooldownSec.value = settings.notification_cooldown_sec
   dashboardRefreshIntervalSec.value = settings.dashboard_refresh_interval_sec
@@ -62,6 +65,10 @@ onMounted(async () => {
   <div class="settings-grid">
     <NCard title="常规">
       <NFormItem label="检查记录保留天数"><NInputNumber v-model:value="retentionDays" :min="1" :max="365" /></NFormItem>
+      <NFormItem label="每个监控最多保留记录数">
+        <NInputNumber v-model:value="monitorChecksMaxPerMonitor" :min="100" :max="200000" />
+        <template #feedback>同时受保留天数限制；保存后会立即清理并回收数据库空间。</template>
+      </NFormItem>
       <NFormItem label="系统日志保留天数"><NInputNumber v-model:value="logRetentionDays" :min="1" :max="365" /></NFormItem>
       <NFormItem label="证书到期提醒提前天数"><NInputNumber v-model:value="certExpiryWarningDays" :min="1" :max="365" /></NFormItem>
       <NFormItem label="通知冷却时间（秒）"><NInputNumber v-model:value="notificationCooldownSec" :min="0" :max="86400" /></NFormItem>
