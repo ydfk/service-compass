@@ -12,6 +12,8 @@ export const servicesApi = {
       method: 'POST',
       body: JSON.stringify(items),
     }),
+  openUrl: (id: string, mode: 'local' | 'public') =>
+    api<{ url?: string | null }>(`/api/services/${id}/test-open?mode=${mode}`, { method: 'POST' }),
 }
 
 function request(method: string, input: ServiceInput): RequestInit {

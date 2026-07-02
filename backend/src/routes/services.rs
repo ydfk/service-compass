@@ -1,10 +1,11 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{get, post},
 };
 use chrono::Utc;
 use reqwest::Url;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     icon::local,
     models::{
         group::ReorderItem,
-        monitor::MonitorInput,
+        monitor::{MonitorInput, MonitorRow},
         service::{Service, ServiceInput},
     },
     routes::monitors,
@@ -29,6 +30,11 @@ pub fn router() -> Router<AppState> {
             get(get_one).put(update).delete(remove),
         )
         .route("/api/services/{id}/test-open", post(test_open))
+}
+
+#[derive(Deserialize)]
+struct OpenQuery {
+    mode: Option<String>,
 }
 
 async fn list(State(state): State<AppState>) -> AppResult<Json<Vec<Service>>> {
@@ -141,9 +147,14 @@ async fn reorder(
 async fn test_open(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(query): Query<OpenQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
     let service = find(&state, &id).await?;
-    let url = service.public_url.or(service.local_url);
+    let (url, source_mode) = service_open_url(&service, query.mode.as_deref());
+    let url = match url {
+        Some(url) => open_url_with_basic_auth(&state, &service.id, &url, source_mode).await?,
+        None => None,
+    };
     Ok(Json(serde_json::json!({ "url": url })))
 }
 
@@ -234,6 +245,98 @@ fn clean_url(value: Option<&str>) -> Option<String> {
     } else {
         Some(value.to_owned())
     }
+}
+
+fn service_open_url(service: &Service, mode: Option<&str>) -> (Option<String>, &'static str) {
+    match mode {
+        Some("local") => (
+            service
+                .local_url
+                .clone()
+                .or_else(|| service.public_url.clone()),
+            if service.local_url.is_some() {
+                "local"
+            } else {
+                "public"
+            },
+        ),
+        _ => (
+            service
+                .public_url
+                .clone()
+                .or_else(|| service.local_url.clone()),
+            if service.public_url.is_some() {
+                "public"
+            } else {
+                "local"
+            },
+        ),
+    }
+}
+
+async fn open_url_with_basic_auth(
+    state: &AppState,
+    service_id: &str,
+    url: &str,
+    source_mode: &str,
+) -> AppResult<Option<String>> {
+    let Ok(parsed_url) = Url::parse(url) else {
+        return Ok(Some(url.to_owned()));
+    };
+    let monitors = sqlx::query_as::<_, MonitorRow>(
+        "SELECT * FROM monitors WHERE service_id = ? AND monitor_type IN ('http', 'http_keyword') \
+         AND auth_type = 'basic' ORDER BY created_at",
+    )
+    .bind(service_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let Some(monitor) = monitors
+        .iter()
+        .find(|monitor| monitor_matches_open_url(monitor, &parsed_url, source_mode))
+    else {
+        return Ok(Some(url.to_owned()));
+    };
+    let Some(username) = monitor
+        .auth_username
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(Some(url.to_owned()));
+    };
+    let Some(secret) = monitor.auth_password_secret.as_deref() else {
+        return Ok(Some(url.to_owned()));
+    };
+    let password = state.secrets.decrypt(secret).map_err(AppError::Internal)?;
+    Ok(Some(
+        url_with_basic_auth(parsed_url, username, &password).unwrap_or_else(|| url.to_owned()),
+    ))
+}
+
+fn monitor_matches_open_url(monitor: &MonitorRow, url: &Url, source_mode: &str) -> bool {
+    if monitor.target_url_mode == source_mode {
+        return true;
+    }
+    monitor
+        .target_url
+        .as_deref()
+        .filter(|_| monitor.target_url_mode == "custom")
+        .and_then(|target| Url::parse(target).ok())
+        .is_some_and(|target| same_url_origin(&target, url))
+}
+
+fn same_url_origin(left: &Url, right: &Url) -> bool {
+    left.scheme() == right.scheme()
+        && left.host_str() == right.host_str()
+        && left.port_or_known_default() == right.port_or_known_default()
+}
+
+fn url_with_basic_auth(mut url: Url, username: &str, password: &str) -> Option<String> {
+    if !url.username().is_empty() {
+        return Some(url.to_string());
+    }
+    url.set_username(username).ok()?;
+    url.set_password(Some(password)).ok()?;
+    Some(url.to_string())
 }
 
 async fn sync_service_monitors(

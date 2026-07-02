@@ -19,6 +19,7 @@ const emit = defineEmits<{
   edit: [service: Service]
   clone: [service: Service]
   move: [service: Service, direction: -1 | 1]
+  open: [service: Service, fallbackUrl: string]
 }>()
 const iconFailed = ref(false)
 const activeUrl = computed(() => {
@@ -49,8 +50,7 @@ watch(iconUrl, () => {
 })
 
 function open() {
-  if (activeUrl.value && !props.sorting)
-    window.open(activeUrl.value, '_blank', 'noopener,noreferrer')
+  if (activeUrl.value && !props.sorting) emit('open', props.service, activeUrl.value)
 }
 
 function trackLabel(track: MonitorTrack) {

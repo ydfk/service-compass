@@ -162,6 +162,24 @@ async function saveService() {
   await dashboard.load()
 }
 
+async function openServiceUrl(service: Service, fallbackUrl: string) {
+  if (!auth.authenticated) {
+    openExternal(fallbackUrl)
+    return
+  }
+  try {
+    const result = await servicesApi.openUrl(service.id, mode.value)
+    openExternal(result.url || fallbackUrl)
+  } catch {
+    message.warning('无法获取扩展跳转地址，已使用普通地址打开')
+    openExternal(fallbackUrl)
+  }
+}
+
+function openExternal(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 function filterGroup(group: DashboardGroup, spaceName = ''): DashboardGroup {
   const keyword = dashboardSearch.value.trim().toLowerCase()
   if (!keyword) return group
@@ -334,6 +352,7 @@ onUnmounted(() => {
             @clone="openClone"
             @edit="openEditor"
             @move="moveService"
+            @open="openServiceUrl"
           />
         </div>
       </NSpin>

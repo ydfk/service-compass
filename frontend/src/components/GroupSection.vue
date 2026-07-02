@@ -16,6 +16,7 @@ const emit = defineEmits<{
   clone: [service: Service]
   add: [group: DashboardGroup]
   move: [group: DashboardGroup, service: Service, direction: -1 | 1]
+  open: [service: Service, fallbackUrl: string]
 }>()
 </script>
 
@@ -44,6 +45,7 @@ const emit = defineEmits<{
         @edit="emit('edit', $event)"
         @clone="emit('clone', $event)"
         @move="(item, direction) => emit('move', group, item, direction)"
+        @open="(item, fallbackUrl) => emit('open', item, fallbackUrl)"
       />
     </div>
   </section>

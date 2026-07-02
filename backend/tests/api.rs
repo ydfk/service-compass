@@ -251,6 +251,44 @@ async fn service_can_be_created_without_urls() {
 }
 
 #[tokio::test]
+async fn service_open_url_can_include_basic_auth_for_authenticated_click() {
+    let app = test_app().await;
+    let token = login_token(&app).await;
+
+    let created = app
+        .clone()
+        .oneshot(
+            Request::post("/api/services")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"group_id":null,"name":"Protected","public_url":"https://example.com/admin","create_monitor":true,"monitor":{"name":"","monitor_type":"http","target_url_mode":"public","auth_type":"basic","auth_username":"alice","auth_password":"secret"}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK);
+    let body = to_bytes(created.into_body(), 4096).await.unwrap();
+    let service: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let service_id = service["id"].as_str().unwrap();
+
+    let opened = app
+        .oneshot(
+            Request::post(format!("/api/services/{service_id}/test-open?mode=public"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let body = to_bytes(opened.into_body(), 4096).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["url"], "https://alice:secret@example.com/admin");
+}
+
+#[tokio::test]
 async fn postgres_monitor_can_be_created_with_secret_password() {
     let app = test_app().await;
     let token = login_token(&app).await;
