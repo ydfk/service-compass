@@ -338,7 +338,7 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
     }
     if !matches!(
         input.monitor_type.as_str(),
-        "http" | "http_keyword" | "dns" | "cert" | "docker"
+        "http" | "http_keyword" | "dns" | "cert" | "docker" | "postgres"
     ) {
         return Err(AppError::Validation("监控类型无效".into()));
     }
@@ -370,6 +370,9 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
     if input.monitor_type == "docker" && input.service_id.is_none() {
         return Err(AppError::Validation("Docker 监控必须关联服务".into()));
     }
+    if input.monitor_type == "postgres" {
+        validate_postgres(input)?;
+    }
     if input.interval_sec < 5
         || input.timeout_sec < 1
         || input.expected_status_min > input.expected_status_max
@@ -384,6 +387,61 @@ fn validate(input: &MonitorInput) -> AppResult<()> {
 
 pub(crate) fn validate_input(input: &MonitorInput) -> AppResult<()> {
     validate(input)
+}
+
+fn validate_postgres(input: &MonitorInput) -> AppResult<()> {
+    if input
+        .target_url
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        return Err(AppError::Validation("PostgreSQL 主机不能为空".into()));
+    }
+    if !(1..=65535).contains(&input.cert_port) {
+        return Err(AppError::Validation("PostgreSQL 端口无效".into()));
+    }
+    if input
+        .domain
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        return Err(AppError::Validation("PostgreSQL 数据库名不能为空".into()));
+    }
+    if input
+        .auth_username
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        return Err(AppError::Validation("PostgreSQL 用户名不能为空".into()));
+    }
+    let query = input
+        .expected_value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("SELECT 1");
+    if !query_is_readonly(query) {
+        return Err(AppError::Validation(
+            "PostgreSQL 检查 SQL 仅支持 SELECT、SHOW 或 WITH 查询".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn query_is_readonly(query: &str) -> bool {
+    let normalized = query.trim_start().to_lowercase();
+    normalized.starts_with("select ")
+        || normalized == "select"
+        || normalized.starts_with("show ")
+        || normalized == "show"
+        || normalized.starts_with("with ")
+        || normalized == "with"
 }
 
 async fn create_record(state: &AppState, input: &MonitorInput) -> AppResult<String> {
@@ -409,7 +467,7 @@ pub(crate) async fn sync_http_for_service(
     input: Option<&MonitorInput>,
 ) -> AppResult<()> {
     let existing: Option<String> = sqlx::query_scalar(
-        "SELECT id FROM monitors WHERE service_id = ? AND monitor_type IN ('http', 'http_keyword') \
+        "SELECT id FROM monitors WHERE service_id = ? AND monitor_type IN ('http', 'http_keyword', 'postgres') \
          ORDER BY created_at LIMIT 1",
     )
     .bind(service_id)
@@ -417,7 +475,7 @@ pub(crate) async fn sync_http_for_service(
     .await?;
     let Some(input) = input else {
         sqlx::query(
-            "DELETE FROM monitors WHERE service_id = ? AND monitor_type IN ('http', 'http_keyword')",
+            "DELETE FROM monitors WHERE service_id = ? AND monitor_type IN ('http', 'http_keyword', 'postgres')",
         )
         .bind(service_id)
         .execute(&state.pool)
@@ -427,7 +485,11 @@ pub(crate) async fn sync_http_for_service(
     let mut monitor = input.clone();
     monitor.service_id = Some(service_id.to_string());
     if monitor.name.trim().is_empty() {
-        monitor.name = format!("{service_name} HTTP");
+        monitor.name = format!(
+            "{} {}",
+            service_name,
+            primary_monitor_label(&monitor.monitor_type)
+        );
     }
     validate(&monitor)?;
     if let Some(id) = existing {
@@ -438,6 +500,14 @@ pub(crate) async fn sync_http_for_service(
         sync_notification_rules(state, &id, &monitor).await?;
     }
     Ok(())
+}
+
+fn primary_monitor_label(monitor_type: &str) -> &str {
+    match monitor_type {
+        "postgres" => "PostgreSQL",
+        "http_keyword" => "HTTP 关键字",
+        _ => "HTTP",
+    }
 }
 
 pub(crate) async fn sync_docker_for_service(

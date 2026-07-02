@@ -90,7 +90,7 @@ export interface ServiceInput {
   docker_compose_service?: string | null
   create_monitor: boolean
   cert_expiry_notify: boolean
-  monitor_type?: 'http' | 'http_keyword'
+  monitor_type?: 'http' | 'http_keyword' | 'postgres'
   monitor_target_url_mode?: 'local' | 'public'
   monitor?: MonitorInput | null
   status_notify_enabled?: boolean | null
@@ -101,7 +101,7 @@ export interface Monitor {
   id: string
   service_id?: string | null
   name: string
-  monitor_type: 'http' | 'http_keyword' | 'dns' | 'cert' | 'docker'
+  monitor_type: 'http' | 'http_keyword' | 'dns' | 'cert' | 'docker' | 'postgres'
   target_url?: string | null
   target_url_mode: 'custom' | UrlMode
   method: string

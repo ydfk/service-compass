@@ -251,6 +251,51 @@ async fn service_can_be_created_without_urls() {
 }
 
 #[tokio::test]
+async fn postgres_monitor_can_be_created_with_secret_password() {
+    let app = test_app().await;
+    let token = login_token(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::post("/api/monitors")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"service_id":null,"name":"PostgreSQL","monitor_type":"postgres","target_url":"127.0.0.1","target_url_mode":"custom","domain":"postgres","auth_username":"postgres","auth_password":"secret","expected_value":"SELECT 1","cert_port":5432,"enabled":true}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["monitor_type"], "postgres");
+    assert_eq!(payload["has_auth_password"], true);
+    assert!(payload.get("auth_password").is_none());
+}
+
+#[tokio::test]
+async fn postgres_monitor_rejects_write_sql() {
+    let app = test_app().await;
+    let token = login_token(&app).await;
+
+    let response = app
+        .oneshot(
+            Request::post("/api/monitors")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"service_id":null,"name":"PostgreSQL","monitor_type":"postgres","target_url":"127.0.0.1","target_url_mode":"custom","domain":"postgres","auth_username":"postgres","expected_value":"DELETE FROM users","cert_port":5432,"enabled":true}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn notification_channel_with_bad_secret_does_not_break_list() {
     let state = test_state().await;
     sqlx::query(

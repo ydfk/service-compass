@@ -244,7 +244,11 @@ async fn sync_service_monitors(
     let mut legacy_monitor = input.create_monitor.then(|| {
         MonitorInput::service_http(
             service_id.to_string(),
-            format!("{} HTTP", input.name.trim()),
+            format!(
+                "{} {}",
+                input.name.trim(),
+                primary_monitor_label(&input.monitor_type)
+            ),
             input.monitor_type.clone(),
             input.monitor_target_url_mode.clone(),
         )
@@ -361,22 +365,37 @@ fn validate(input: &ServiceInput) -> AppResult<()> {
     }
     validate_service_notification(input)?;
     if input.create_monitor {
-        let legacy_monitor;
-        let monitor = if let Some(monitor) = input.monitor.as_ref() {
-            monitor
-        } else {
-            legacy_monitor = MonitorInput::service_http(
+        let mut monitor = input.monitor.clone().unwrap_or_else(|| {
+            MonitorInput::service_http(
                 "pending".into(),
-                format!("{} HTTP", input.name.trim()),
+                format!(
+                    "{} {}",
+                    input.name.trim(),
+                    primary_monitor_label(&input.monitor_type)
+                ),
                 input.monitor_type.clone(),
                 input.monitor_target_url_mode.clone(),
+            )
+        });
+        if monitor.name.trim().is_empty() {
+            monitor.name = format!(
+                "{} {}",
+                input.name.trim(),
+                primary_monitor_label(&monitor.monitor_type)
             );
-            &legacy_monitor
-        };
-        validate_monitor_source(input, monitor)?;
-        monitors::validate_input(monitor)?;
+        }
+        validate_monitor_source(input, &monitor)?;
+        monitors::validate_input(&monitor)?;
     }
     Ok(())
+}
+
+fn primary_monitor_label(monitor_type: &str) -> &str {
+    match monitor_type {
+        "postgres" => "PostgreSQL",
+        "http_keyword" => "HTTP 关键字",
+        _ => "HTTP",
+    }
 }
 
 fn validate_service_notification(input: &ServiceInput) -> AppResult<()> {

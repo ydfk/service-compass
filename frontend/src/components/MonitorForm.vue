@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NAlert, NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch } from 'naive-ui'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import type { MonitorInput, NotificationChannel, Service } from '../types'
 
 const props = withDefaults(
@@ -15,7 +15,7 @@ const props = withDefaults(
     notificationChannels: () => [],
     showIdentity: true,
     showNotification: false,
-    allowedTypes: () => ['http', 'http_keyword', 'dns', 'cert', 'docker'],
+    allowedTypes: () => ['http', 'http_keyword', 'dns', 'cert', 'docker', 'postgres'],
   },
 )
 const model = defineModel<MonitorInput>({ required: true })
@@ -27,6 +27,7 @@ const typeOptions = computed(() =>
   [
     { label: 'HTTP / HTTPS', value: 'http' as const },
     { label: 'HTTP / HTTPS 关键字', value: 'http_keyword' as const },
+    { label: 'PostgreSQL 数据库', value: 'postgres' as const },
     { label: 'DNS 解析', value: 'dns' as const },
     { label: 'HTTPS 证书', value: 'cert' as const },
     { label: 'Docker 容器状态', value: 'docker' as const },
@@ -41,6 +42,22 @@ const ignoreTlsErrors = computed({
     model.value.tls_verify = !value
   },
 })
+
+watch(
+  () => model.value.monitor_type,
+  (type) => {
+    if (type === 'postgres') {
+      model.value.target_url_mode = 'custom'
+      if (!model.value.cert_port || model.value.cert_port === 443) model.value.cert_port = 5432
+      if (!model.value.expected_value?.trim()) model.value.expected_value = 'SELECT 1'
+      return
+    }
+    if (type === 'cert' && (!model.value.cert_port || model.value.cert_port === 5432)) {
+      model.value.cert_port = 443
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -78,6 +95,9 @@ const ignoreTlsErrors = computed({
     <NAlert v-if="model.monitor_type === 'docker'" type="info" :bordered="false">
       Docker 监控读取服务所关联容器的运行状态与 Health Check。
     </NAlert>
+    <NAlert v-if="model.monitor_type === 'postgres'" type="info" :bordered="false">
+      PostgreSQL 监控会连接数据库并执行只读检查 SQL，适合检查数据库可连接性。
+    </NAlert>
     <NFormItem
       v-if="['http', 'http_keyword'].includes(model.monitor_type) && model.target_url_mode === 'custom'"
       label="目标 URL"
@@ -111,6 +131,31 @@ const ignoreTlsErrors = computed({
       </NFormItem>
       <NAlert type="info" :bordered="false">证书到期提醒提前天数在「设置」中统一配置。</NAlert>
     </div>
+    <template v-if="model.monitor_type === 'postgres'">
+      <div class="form-grid three">
+        <NFormItem label="PostgreSQL 主机">
+          <NInput v-model:value="model.target_url" placeholder="10.0.0.10 或 postgres.example.com" />
+        </NFormItem>
+        <NFormItem label="端口">
+          <NInputNumber v-model:value="model.cert_port" :min="1" :max="65535" />
+        </NFormItem>
+        <NFormItem label="数据库名">
+          <NInput v-model:value="model.domain" placeholder="postgres" />
+        </NFormItem>
+      </div>
+      <div class="form-grid">
+        <NFormItem label="用户名">
+          <NInput v-model:value="model.auth_username" placeholder="用于连接 PostgreSQL 的用户" />
+        </NFormItem>
+        <NFormItem label="密码（留空则保留）">
+          <NInput v-model:value="model.auth_password" type="password" show-password-on="click" />
+        </NFormItem>
+      </div>
+      <NFormItem label="检查 SQL">
+        <NInput v-model:value="model.expected_value" type="textarea" placeholder="SELECT 1" />
+        <template #feedback>仅支持 SELECT / SHOW / WITH 查询，用于验证数据库可连接且查询可执行。</template>
+      </NFormItem>
+    </template>
     <div class="form-grid three">
       <NFormItem label="检查间隔（秒）">
         <NInputNumber v-model:value="model.interval_sec" :min="5" />

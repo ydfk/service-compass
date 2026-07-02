@@ -56,6 +56,7 @@ function open() {
 function trackLabel(track: MonitorTrack) {
   if (track.monitor_type === 'docker') return 'Docker'
   if (track.monitor_type === 'http_keyword') return 'HTTP 关键字'
+  if (track.monitor_type === 'postgres') return 'PostgreSQL'
   return track.monitor_type.toUpperCase()
 }
 

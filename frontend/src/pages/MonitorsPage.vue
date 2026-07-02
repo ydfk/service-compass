@@ -120,6 +120,7 @@ const filteredMonitors = computed(() =>
         monitor.monitor_type,
         monitor.target_url,
         monitor.domain,
+        monitor.auth_username,
         monitor.last_error,
         service?.name,
         service?.docker_name,
@@ -152,8 +153,7 @@ const columns: DataTableColumns<Monitor> = [
   {
     title: '类型',
     key: 'monitor_type',
-    render: (row) =>
-      row.monitor_type === 'http_keyword' ? 'HTTP 关键字' : row.monitor_type.toUpperCase(),
+    render: (row) => monitorTypeLabel(row.monitor_type),
   },
   {
     title: '状态条',
@@ -306,6 +306,28 @@ function recentLog(monitor: Monitor) {
     .join(' / ')
 }
 
+function monitorTypeLabel(type: Monitor['monitor_type']) {
+  const labels: Record<Monitor['monitor_type'], string> = {
+    http: 'HTTP',
+    http_keyword: 'HTTP 关键字',
+    dns: 'DNS',
+    cert: 'HTTPS 证书',
+    docker: 'Docker',
+    postgres: 'PostgreSQL',
+  }
+  return labels[type]
+}
+
+function monitorTarget(monitor: Monitor) {
+  if (monitor.monitor_type === 'postgres') {
+    const host = monitor.target_url || '未填写主机'
+    const port = monitor.cert_port || 5432
+    const database = monitor.domain || '未填写数据库'
+    return `${host}:${port} / ${database}`
+  }
+  return monitor.target_url || monitor.domain || '随服务地址'
+}
+
 function serviceScope(monitor: Monitor) {
   const service = monitor.service_id ? serviceById.value.get(monitor.service_id) : null
   if (!service) return '未关联服务'
@@ -348,6 +370,7 @@ function briefExtra(check: MonitorCheck) {
     const extra = JSON.parse(check.extra_json) as Record<string, unknown>
     if (typeof extra.health_status === 'string') return `Health: ${extra.health_status}`
     if (typeof extra.days_left === 'number') return `证书剩余 ${extra.days_left} 天`
+    if (typeof extra.database === 'string') return `库：${extra.database}`
     return JSON.stringify(extra)
   } catch {
     return check.extra_json
@@ -576,8 +599,8 @@ onMounted(load)
         </NCard>
 
         <NDescriptions :column="2" size="small" label-placement="left" class="monitor-meta">
-          <NDescriptionsItem label="类型">{{ selectedMonitor.monitor_type.toUpperCase() }}</NDescriptionsItem>
-          <NDescriptionsItem label="目标">{{ selectedMonitor.target_url || selectedMonitor.domain || '随服务地址' }}</NDescriptionsItem>
+          <NDescriptionsItem label="类型">{{ monitorTypeLabel(selectedMonitor.monitor_type) }}</NDescriptionsItem>
+          <NDescriptionsItem label="目标">{{ monitorTarget(selectedMonitor) }}</NDescriptionsItem>
           <NDescriptionsItem label="上次检查">{{ selectedMonitor.last_checked_at ? new Date(selectedMonitor.last_checked_at).toLocaleString() : '等待首次检查' }}</NDescriptionsItem>
           <NDescriptionsItem label="最近错误">{{ selectedMonitor.last_error || '—' }}</NDescriptionsItem>
         </NDescriptions>

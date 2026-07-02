@@ -86,8 +86,9 @@ const monitorUrl = computed(() => {
     return form.value.local_url || form.value.public_url || ''
   return form.value.public_url || form.value.local_url || ''
 })
-const canNotifyCertificate = computed(() =>
-  monitorUrl.value.trim().toLowerCase().startsWith('https://'),
+const isHttpMonitor = computed(() => ['http', 'http_keyword'].includes(monitor.value.monitor_type))
+const canNotifyCertificate = computed(
+  () => isHttpMonitor.value && monitorUrl.value.trim().toLowerCase().startsWith('https://'),
 )
 const hasStatusTarget = computed(
   () => form.value.create_monitor || dockerEnabled.value || form.value.cert_expiry_notify,
@@ -298,7 +299,7 @@ function applyDefaultNotification() {
           v-model="monitor"
           :services="[]"
           :show-identity="false"
-          :allowed-types="['http', 'http_keyword']"
+          :allowed-types="['http', 'http_keyword', 'postgres']"
         />
         <label v-if="form.create_monitor" class="cert-toggle" :class="{ disabled: !canNotifyCertificate }">
           <NSwitch v-model:value="form.cert_expiry_notify" :disabled="!canNotifyCertificate" />
@@ -319,7 +320,7 @@ function applyDefaultNotification() {
             placeholder="选择通知通道"
           />
         </NFormItem>
-        <small class="docker-note">状态通知会同步到该服务的 HTTP、Docker 和证书自动监控。</small>
+        <small class="docker-note">状态通知会同步到该服务的 HTTP / PostgreSQL、Docker 和证书自动监控。</small>
       </NCard>
 
       <div class="footer-row">

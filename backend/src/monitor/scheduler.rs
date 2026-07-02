@@ -66,6 +66,7 @@ pub async fn run(state: &AppState, monitor: &MonitorRow) -> monitor::CheckResult
         "dns" => monitor::dns::check(monitor).await,
         "cert" => monitor::cert::check(state, monitor).await,
         "docker" => monitor::docker::check(state, monitor).await,
+        "postgres" => monitor::postgres::check(state, monitor).await,
         _ => monitor::CheckResult::down("暂不支持此监控类型"),
     };
     tracing::info!(

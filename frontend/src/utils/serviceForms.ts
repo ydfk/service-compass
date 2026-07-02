@@ -65,7 +65,7 @@ export function monitorToInput(monitor: Monitor): MonitorInput {
   return {
     service_id: monitor.service_id,
     name: monitor.name,
-    monitor_type: monitor.monitor_type === 'http_keyword' ? 'http_keyword' : 'http',
+    monitor_type: monitor.monitor_type,
     target_url: monitor.target_url,
     target_url_mode: monitor.target_url_mode,
     method: monitor.method,
@@ -125,7 +125,7 @@ export function serviceToInput(
     docker_compose_service: service.docker_compose_service,
     create_monitor: Boolean(monitor?.enabled),
     cert_expiry_notify: Boolean(certMonitor?.enabled),
-    monitor_type: monitor?.monitor_type === 'http_keyword' ? 'http_keyword' : 'http',
+    monitor_type: primaryMonitorType(monitor),
     monitor_target_url_mode: monitor?.target_url_mode === 'local' ? 'local' : 'public',
     status_notify_enabled: notifySource?.notify_enabled ?? false,
     status_notification_channel_ids: notifySource?.notification_channel_ids ?? [],
@@ -134,7 +134,9 @@ export function serviceToInput(
 
 export function serviceHttpMonitor(monitors: Monitor[], serviceId: string) {
   return monitors.find(
-    (item) => item.service_id === serviceId && ['http', 'http_keyword'].includes(item.monitor_type),
+    (item) =>
+      item.service_id === serviceId &&
+      ['http', 'http_keyword', 'postgres'].includes(item.monitor_type),
   )
 }
 
@@ -166,20 +168,33 @@ export function validateServiceDraft(input: ServiceInput, monitor: MonitorInput)
     return '关联 Docker 时请选择具体容器'
   }
   if (input.create_monitor) {
+    if (monitor.monitor_type === 'postgres') {
+      if (!monitor.target_url?.trim()) return 'PostgreSQL 监控需要填写主机'
+      if (!monitor.cert_port || monitor.cert_port < 1 || monitor.cert_port > 65535) {
+        return 'PostgreSQL 端口无效'
+      }
+      if (!monitor.domain?.trim()) return 'PostgreSQL 监控需要填写数据库名'
+      if (!monitor.auth_username?.trim()) return 'PostgreSQL 监控需要填写用户名'
+      if (!isReadonlyPostgresQuery(monitor.expected_value || 'SELECT 1')) {
+        return 'PostgreSQL 检查 SQL 仅支持 SELECT、SHOW 或 WITH 查询'
+      }
+    }
     if (monitor.monitor_type === 'http_keyword' && !monitor.keyword?.trim()) {
       return 'HTTP 关键字监控需要填写响应关键字，或切换为普通 HTTP'
     }
-    if (monitor.target_url_mode === 'custom' && !monitor.target_url?.trim()) {
+    const isHttp = ['http', 'http_keyword'].includes(monitor.monitor_type)
+    if (isHttp && monitor.target_url_mode === 'custom' && !monitor.target_url?.trim()) {
       return '自定义监控地址不能为空'
     }
     if (
+      isHttp &&
       ['local', 'public'].includes(monitor.target_url_mode) &&
       !input.local_url?.trim() &&
       !input.public_url?.trim()
     ) {
       return '监控使用服务地址时，内网地址或外网地址至少填写一个'
     }
-    if (monitor.method === 'POST' && monitor.request_headers?.trim()) {
+    if (isHttp && monitor.method === 'POST' && monitor.request_headers?.trim()) {
       try {
         JSON.parse(monitor.request_headers)
       } catch {
@@ -197,4 +212,22 @@ function cleanUrl(value?: string | null) {
   const trimmed = value?.trim() || ''
   if (!trimmed || trimmed === 'http://' || trimmed === 'https://') return ''
   return trimmed
+}
+
+function primaryMonitorType(monitor?: Monitor): ServiceInput['monitor_type'] {
+  if (monitor?.monitor_type === 'postgres') return 'postgres'
+  if (monitor?.monitor_type === 'http') return 'http'
+  return 'http_keyword'
+}
+
+function isReadonlyPostgresQuery(query: string) {
+  const normalized = query.trimStart().toLowerCase()
+  return (
+    normalized === 'select' ||
+    normalized.startsWith('select ') ||
+    normalized === 'show' ||
+    normalized.startsWith('show ') ||
+    normalized === 'with' ||
+    normalized.startsWith('with ')
+  )
 }

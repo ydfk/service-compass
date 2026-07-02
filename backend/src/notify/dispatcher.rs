@@ -189,6 +189,7 @@ fn check_label(monitor: &MonitorRow) -> &'static str {
         "docker" => "Docker",
         "cert" => "HTTPS 证书",
         "dns" => "DNS",
+        "postgres" => "PostgreSQL",
         _ => "监控检查",
     }
 }
